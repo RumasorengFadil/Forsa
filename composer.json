@@ -3,8 +3,13 @@
     "description": "FORSA - Formasi & Realisasi SH/AP",
     "type": "project",
     "require": {
-        "php": ">=8.1",
+        "php": ">=8.2",
         "phpoffice/phpspreadsheet": "^2.0"
+    },
+    "config": {
+        "platform": {
+            "php": "8.2"
+        }
     },
     "autoload": {
         "psr-4": {

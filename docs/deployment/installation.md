@@ -2,7 +2,7 @@
 
 ## Prasyarat
 
-- PHP ≥ 8.1 dengan ekstensi `pdo_pgsql`
+- PHP ≥ 8.2 dengan ekstensi `pdo_pgsql`
 - PostgreSQL ≥ 13 (pengembangan diuji pada PostgreSQL 17)
 - Composer
 
