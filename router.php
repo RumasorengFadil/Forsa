@@ -31,8 +31,27 @@ if (str_starts_with($uri, '/assets/')) {
 $routeMap = require __DIR__ . '/route_map.php';
 
 $scriptName = ltrim($uri, '/');
+
+// Legacy ".php" page URLs (e.g. the old /dashboard.php) still work — they
+// 301-redirect to the clean URL instead of 404ing, so old bookmarks/links
+// keep navigating correctly. Only real *pages* are listed here; POST/JSON
+// action endpoints never renamed their ".php" suffix, so they need no entry.
+$legacyPageRedirects = [
+    'index.php' => '/',
+    'login.php' => '/login',
+    'dashboard.php' => '/dashboard',
+    'users.php' => '/users',
+];
+
+if (isset($legacyPageRedirects[$scriptName])) {
+    $target = $legacyPageRedirects[$scriptName];
+    $queryString = $_SERVER['QUERY_STRING'] ?? '';
+    header('Location: ' . $target . ($queryString !== '' ? '?' . $queryString : ''), true, 301);
+    return true;
+}
+
 if ($scriptName === '') {
-    $scriptName = 'index.php';
+    $scriptName = 'login';
 }
 
 if (isset($routeMap[$scriptName])) {

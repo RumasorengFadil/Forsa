@@ -11,10 +11,14 @@ function require_login(): array
 {
     $user = current_user();
     if (!$user) {
-        if (str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') || str_ends_with($_SERVER['SCRIPT_NAME'] ?? '', '_api.php')) {
+        // Use REQUEST_URI (the real requested path) rather than SCRIPT_NAME —
+        // under the router.php front controller, SCRIPT_NAME is always
+        // "/router.php" regardless of which page/endpoint was requested.
+        $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?? '';
+        if (str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') || str_ends_with($requestPath, '_api.php')) {
             json_error('Sesi berakhir, silakan login kembali.', 401);
         }
-        redirect('/login.php');
+        redirect('/login');
     }
     return $user;
 }

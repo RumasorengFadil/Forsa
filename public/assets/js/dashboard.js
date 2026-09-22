@@ -4,6 +4,13 @@
 
     let currentSelection = null;
 
+    // Cache of the last successful dashboard_api / ftk_tree_api (root level)
+    // responses, reused by the Tahap 3 drilldown modals so they never
+    // recompute anything — they only slice/format data already fetched for
+    // the dashboard and the tree.
+    let lastDashboardData = null;
+    let rootTreeNodes = [];
+
     // ---------- History dropdown ----------
     async function loadHistoryOptions() {
         const res = await fetch('/history_api.php');
@@ -58,6 +65,7 @@
             return;
         }
         const data = json.data;
+        lastDashboardData = data;
 
         document.getElementById('period-label').textContent =
             (data.mode === 'inspection' ? 'Mode Inspeksi Histori • ' : 'Realisasi SH/AP • ') + data.period_label;
@@ -74,6 +82,9 @@
         }
 
         content.innerHTML = renderDashboard(data);
+        populateTreeLevelFilterOptions(treeGroups);
+        syncTreeHeaderStickyOffset();
+        bindDashboardDrilldownClicks();
         renderTree(true);
     }
 
@@ -95,7 +106,7 @@
 
     function renderDashboard(data) {
         const shapCards = data.per_shap.map(s => `
-            <div class="shap-card">
+            <div class="shap-card clickable" data-shap="${s.shap_code}" role="button" tabindex="0" aria-label="Lihat detail ${s.shap_name}">
                 <div class="shap-name">${s.shap_name}</div>
                 <span class="shap-pct ${pctClass(s.status_code)}">${fmtPct(s.pct)}</span>
                 <span class="shap-gap">Gap ${s.gap >= 0 ? '+' : ''}${fmt(s.gap)}</span>
@@ -117,21 +128,26 @@
 
         const maxGap = Math.max(1, ...data.gap_terbesar.map(g => Math.abs(g.gap)));
         const gapRows = data.gap_terbesar.map(g => `
-            <div class="bar-row">
+            <div class="bar-row clickable" data-shap="${g.shap_code}" role="button" tabindex="0" aria-label="Lihat detail ${g.shap_name}">
                 <span class="bar-label">${g.shap_name}</span>
                 <div class="bar-track"><div class="bar-fill" style="width:${g.bar_pct}%"></div></div>
                 <span class="bar-value">${g.gap}</span>
             </div>`).join('');
 
-        const jenjangRows = data.per_jenjang.map(j => `
-            <div class="stack-bar-row">
+        const jenjangRows = data.per_jenjang.map(j => {
+            const hasData = j.ftk > 0 || j.realisasi > 0;
+            const cls = hasData ? 'stack-bar-row clickable' : 'stack-bar-row';
+            const attrs = hasData ? `data-group="${j.group}" role="button" tabindex="0" aria-label="Lihat detail jenjang ${j.label}"` : '';
+            return `
+            <div class="${cls}" ${attrs}>
                 <span class="bar-label">${j.label}</span>
                 <div class="stack-track">
                     <div class="stack-fill-ok" style="width:${j.bar_ok_pct}%"></div>
                     <div class="stack-fill-gap" style="width:${j.bar_gap_pct}%"></div>
                 </div>
                 <span class="stack-values">${fmt(j.ftk)} &nbsp; ${fmt(j.belum_dipenuhi)}</span>
-            </div>`).join('');
+            </div>`;
+        }).join('');
 
         const insightLines = data.insight.lines.map(l => `
             <li>
@@ -211,7 +227,7 @@
             </div>
             <div class="tree-scroll">
                 <table class="tree-table" id="tree-table">
-                    ${renderTreeHeader(data.per_jenjang.map(j => j.group))}
+                    ${renderTreeHeader(data.job_level_order)}
                     <tbody id="tree-tbody"></tbody>
                 </table>
             </div>
@@ -224,30 +240,65 @@
     let treeGroups = [];
     let treeFilters = { search: '', job_level_group: '', position_grade: '', gap_status: '' };
 
+    const GROUP_LABELS = { 'gen 1-3': 'GEN 1-3', MD: 'MD', MM: 'MM', MA: 'MA', spesialist: 'SPECIALIST', 'Senior Specialist': 'SR. SPECIALIST', 'Junior Expert': 'JR. EXPERT', Expert: 'EXPERT', 'Senior Expert': 'SR. EXPERT' };
+
     function renderTreeHeader(groups) {
         treeGroups = groups;
-        const groupLabels = { 'gen 1-3': 'GEN 1-3', MD: 'MD', MM: 'MM', MA: 'MA', spesialist: 'SPECIALIST', 'Senior Specialist': 'SR. SPECIALIST', 'Junior Expert': 'JR. EXPERT', Expert: 'EXPERT', 'Senior Expert': 'SR. EXPERT' };
         const metricCols = ['FTK', 'Organik', 'Tugas Karya', 'Pihak Ketiga', 'Total Real.', 'Sisa'];
 
-        const groupHeaderRow = ['<th class="col-name" rowspan="2">UNIT / ORGANISASI / JABATAN</th>']
-            .concat(['TOTAL', ...groups].map(g => `<th colspan="6">${g === 'TOTAL' ? 'TOTAL' : (groupLabels[g] || g)}</th>`))
+        // The name column header is split into two independent single-row
+        // sticky cells (one per header row) instead of one rowspan=2 cell.
+        // A rowspan cell that must stick on BOTH axes at once (top *and*
+        // left) renders at the wrong stacking order in Chrome/Safari once
+        // the table is scrolled horizontally — its z-index is not reliably
+        // respected against sibling header cells in that state. Two plain
+        // cells with matching background/borders look identical but don't
+        // hit that bug, since each is only ever sticky the same way its row
+        // already is.
+        const groupHeaderRow = ['<th class="col-name">UNIT / ORGANISASI / JABATAN</th>']
+            .concat(['TOTAL', ...groups].map(g => `<th colspan="6">${g === 'TOTAL' ? 'TOTAL' : (GROUP_LABELS[g] || g)}</th>`))
             .join('');
 
-        const subHeaderRow = ['TOTAL', ...groups].map(() =>
-            metricCols.map(m => `<th>${m}</th>`).join('')
-        ).join('');
-
-        const levelFilter = document.getElementById('tree-filter-level');
-        if (levelFilter) {
-            levelFilter.innerHTML = '<option value="">Semua Jenjang</option>' +
-                groups.map(g => `<option value="${g}">${groupLabels[g] || g}</option>`).join('');
-        }
+        const subHeaderRow = ['<th class="col-name"></th>']
+            .concat(['TOTAL', ...groups].map(() => metricCols.map(m => `<th>${m}</th>`).join('')))
+            .join('');
 
         return `<thead>
             <tr class="group-row">${groupHeaderRow}</tr>
             <tr>${subHeaderRow}</tr>
         </thead>`;
     }
+
+    // renderTreeHeader() above only builds a string — it runs *before* that
+    // string is assigned to the DOM (it's called inside renderDashboard()'s
+    // template literal), so it can never safely touch #tree-filter-level
+    // itself (that element doesn't exist yet, or is the about-to-be-replaced
+    // previous one). Populate the <select> here instead, once the new HTML
+    // is actually in the document.
+    function populateTreeLevelFilterOptions(groups) {
+        const levelFilter = document.getElementById('tree-filter-level');
+        if (!levelFilter) return;
+        levelFilter.innerHTML = '<option value="">Semua Jenjang</option>' +
+            groups.map(g => `<option value="${g}">${GROUP_LABELS[g] || g}</option>`).join('');
+    }
+
+    // Measures the *actual* rendered height of the jenjang group-row (the
+    // first sticky header layer) and exposes it as a CSS variable so the
+    // metric sub-header row underneath (the second sticky layer, Tahap 5)
+    // can stick exactly below it instead of overlapping — see the CSS
+    // comment above .tree-table thead th for the full picture.
+    function syncTreeHeaderStickyOffset() {
+        const table = document.getElementById('tree-table');
+        const groupRow = table ? table.querySelector('thead tr.group-row') : null;
+        if (!table || !groupRow) return;
+        table.style.setProperty('--tree-header1-h', groupRow.getBoundingClientRect().height + 'px');
+    }
+
+    let stickyResizeTimer = null;
+    window.addEventListener('resize', () => {
+        clearTimeout(stickyResizeTimer);
+        stickyResizeTimer = setTimeout(syncTreeHeaderStickyOffset, 150);
+    });
 
     function metricCells(metrics) {
         const cols = ['ftk', 'realisasi_organik', 'realisasi_tugas_karya', 'realisasi_pihak_ketiga', 'total_realisasi', 'sisa_delta'];
@@ -306,6 +357,7 @@
         if (!tbody) return;
         tbody.innerHTML = '<tr><td colspan="99" style="text-align:center; padding:16px;"><span class="spin"></span></td></tr>';
         const nodes = await fetchNodes(null, []);
+        rootTreeNodes = nodes;
         tbody.innerHTML = nodes.map(n => renderNodeRow(n, 0)).join('') || '<tr><td colspan="99" style="text-align:center; padding:16px; color:var(--ink-soft);">Tidak ada data.</td></tr>';
         attachTreeHandlers();
     }
@@ -377,6 +429,191 @@
             renderTree();
         }
     });
+
+    // ---------- Detail Drilldown Modal (Tahap 3) ----------
+    // Every number rendered here is read from lastDashboardData (the exact
+    // dashboard_api response already on screen) or rootTreeNodes (the exact
+    // ftk_tree_api root-level response already backing the tree table) — no
+    // new aggregation, no new endpoint, so the modal can never disagree with
+    // the KPI/chart the user clicked.
+    const modalDetail = document.getElementById('modal-detail');
+
+    function openDetailModal(title, bodyHtml, footerHtml) {
+        document.getElementById('detail-modal-title').textContent = title;
+        document.getElementById('detail-modal-body').innerHTML = bodyHtml;
+        document.getElementById('detail-modal-footer').innerHTML = footerHtml;
+        modalDetail.classList.add('open');
+    }
+
+    function closeDetailModal() {
+        modalDetail.classList.remove('open');
+    }
+
+    // Delegated so header close button + dynamically injected footer buttons
+    // are handled by one listener bound once (same pattern as the tree's
+    // single delegated toggle listener — avoids re-binding duplicates).
+    modalDetail.addEventListener('click', (e) => {
+        if (e.target.closest('[data-close]')) closeDetailModal();
+    });
+
+    function jenjangLabel(group) {
+        const entry = (lastDashboardData?.per_jenjang || []).find(j => j.group === group);
+        return entry ? entry.label : group;
+    }
+
+    function detailStatRow(items) {
+        return `<div class="preview-summary">${items.map(i => `
+            <div class="preview-stat"><div class="n ${i.cls || ''}">${i.value}</div><div class="l">${i.label}</div></div>
+        `).join('')}</div>`;
+    }
+
+    function findTreeRowByKey(key) {
+        return Array.from(document.querySelectorAll('#tree-tbody tr')).find(r => r.dataset.key === key);
+    }
+
+    function scrollToTreeAndExpandShap(shapCode) {
+        const treeTable = document.getElementById('tree-table');
+        if (!treeTable) return;
+        treeTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const row = findTreeRowByKey('shap:' + shapCode);
+        if (!row) return;
+        const toggle = row.querySelector('.tree-toggle');
+        if (toggle && toggle.getAttribute('aria-expanded') === 'false') {
+            toggle.click();
+        }
+        row.classList.remove('row-flash');
+        void row.offsetWidth; // force reflow so the animation restarts if it already played once
+        row.classList.add('row-flash');
+    }
+
+    function applyJenjangFilterAndScroll(group) {
+        const select = document.getElementById('tree-filter-level');
+        if (select) select.value = group;
+        treeFilters.job_level_group = group;
+        renderTree();
+        document.getElementById('tree-table').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function openShapDetail(shapCode) {
+        if (!lastDashboardData) return;
+        const shap = lastDashboardData.per_shap.find(s => s.shap_code === shapCode);
+        if (!shap) return;
+        const node = rootTreeNodes.find(n => n.key === 'shap:' + shapCode);
+        const m = node ? node.metrics.total : null;
+
+        const stats = detailStatRow([
+            { value: fmt(shap.ftk), label: 'FTK' },
+            { value: fmt(shap.realisasi), label: 'Realisasi' },
+            { value: fmtPct(shap.pct), label: 'Pemenuhan', cls: pctClass(shap.status_code) },
+            { value: (shap.gap >= 0 ? '+' : '') + fmt(shap.gap), label: 'Gap', cls: gapClass(shap.gap) },
+        ]);
+
+        let breakdownHtml = '';
+        if (m) {
+            breakdownHtml = `
+                <table class="history-table">
+                    <thead><tr><th>Rincian Realisasi</th><th style="text-align:right;">Jumlah</th></tr></thead>
+                    <tbody>
+                        <tr><td>Organik</td><td style="text-align:right;">${fmt(m.realisasi_organik)}</td></tr>
+                        <tr><td>Tugas Karya</td><td style="text-align:right;">${fmt(m.realisasi_tugas_karya)}</td></tr>
+                        <tr><td>Pihak Ketiga</td><td style="text-align:right;">${fmt(m.realisasi_pihak_ketiga)}</td></tr>
+                        <tr><td><b>Total Realisasi</b></td><td style="text-align:right;"><b>${fmt(m.total_realisasi)}</b></td></tr>
+                        <tr><td>Sisa / Delta</td><td style="text-align:right;">${fmt(m.sisa_delta)}</td></tr>
+                    </tbody>
+                </table>`;
+        }
+
+        let jenjangHtml = '';
+        if (node) {
+            const rows = treeGroups.map(g => {
+                const gm = node.metrics.groups[g] || { ftk: 0, total_realisasi: 0, sisa_delta: 0 };
+                if (gm.ftk === 0 && gm.total_realisasi === 0) return '';
+                return `<tr><td>${jenjangLabel(g)}</td><td style="text-align:right;">${fmt(gm.ftk)}</td><td style="text-align:right;">${fmt(gm.total_realisasi)}</td><td style="text-align:right;">${fmt(gm.sisa_delta)}</td></tr>`;
+            }).join('');
+            jenjangHtml = `
+                <table class="history-table" style="margin-top:16px;">
+                    <thead><tr><th>Jenjang</th><th style="text-align:right;">FTK</th><th style="text-align:right;">Realisasi</th><th style="text-align:right;">Sisa</th></tr></thead>
+                    <tbody>${rows || '<tr><td colspan="4" style="text-align:center; color:var(--ink-soft);">Tidak ada rincian jenjang.</td></tr>'}</tbody>
+                </table>`;
+        }
+
+        const footer = `
+            <button class="btn btn-secondary" data-close>Tutup</button>
+            <button class="btn btn-primary" id="btn-goto-tree">Lihat di Drill-down Tree</button>`;
+
+        openDetailModal(shap.shap_name, stats + breakdownHtml + jenjangHtml, footer);
+
+        document.getElementById('btn-goto-tree').addEventListener('click', () => {
+            closeDetailModal();
+            scrollToTreeAndExpandShap(shapCode);
+        });
+    }
+
+    function openJenjangDetail(group) {
+        if (!lastDashboardData) return;
+        const entry = lastDashboardData.per_jenjang.find(j => j.group === group);
+        if (!entry) return;
+
+        const stats = detailStatRow([
+            { value: fmt(entry.ftk), label: 'FTK' },
+            { value: fmt(entry.realisasi), label: 'Realisasi' },
+            { value: fmt(entry.belum_dipenuhi), label: 'Belum Dipenuhi', cls: 'pct-red' },
+            { value: fmt(entry.lebih), label: 'Kelebihan', cls: 'pct-green' },
+        ]);
+
+        const rows = rootTreeNodes
+            .map(node => {
+                const gm = node.metrics.groups[group] || { ftk: 0, total_realisasi: 0, sisa_delta: 0 };
+                if (gm.ftk === 0 && gm.total_realisasi === 0) return null;
+                return { label: node.label, ...gm };
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.sisa_delta - a.sisa_delta);
+
+        const tableHtml = `
+            <table class="history-table" style="margin-top:16px;">
+                <thead><tr><th>SH/AP</th><th style="text-align:right;">FTK</th><th style="text-align:right;">Realisasi</th><th style="text-align:right;">Sisa</th></tr></thead>
+                <tbody>${rows.length ? rows.map(r => `<tr><td>${r.label}</td><td style="text-align:right;">${fmt(r.ftk)}</td><td style="text-align:right;">${fmt(r.total_realisasi)}</td><td style="text-align:right;">${fmt(r.sisa_delta)}</td></tr>`).join('') : '<tr><td colspan="4" style="text-align:center; color:var(--ink-soft);">Tidak ada SH/AP dengan jenjang ini.</td></tr>'}</tbody>
+            </table>`;
+
+        const footer = `
+            <button class="btn btn-secondary" data-close>Tutup</button>
+            <button class="btn btn-primary" id="btn-filter-tree">Filter Drill-down Berdasarkan Jenjang Ini</button>`;
+
+        openDetailModal(entry.label, stats + tableHtml, footer);
+
+        document.getElementById('btn-filter-tree').addEventListener('click', () => {
+            closeDetailModal();
+            applyJenjangFilterAndScroll(group);
+        });
+    }
+
+    // Delegated + bound once on the stable #dashboard-content container, so
+    // re-rendering the dashboard on selection change never stacks duplicate
+    // listeners (same reasoning as the tree's single delegated listener).
+    let dashboardClickBound = false;
+    function bindDashboardDrilldownClicks() {
+        if (dashboardClickBound) return;
+        dashboardClickBound = true;
+        const content = document.getElementById('dashboard-content');
+
+        const activate = (target) => {
+            if (target.dataset.shap) openShapDetail(target.dataset.shap);
+            else if (target.dataset.group) openJenjangDetail(target.dataset.group);
+        };
+
+        content.addEventListener('click', (e) => {
+            const target = e.target.closest('[role="button"][data-shap], [role="button"][data-group]');
+            if (target) activate(target);
+        });
+        content.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            const target = e.target.closest('[role="button"][data-shap], [role="button"][data-group]');
+            if (!target) return;
+            e.preventDefault();
+            activate(target);
+        });
+    }
 
     // ---------- Tabs ----------
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -487,9 +724,9 @@
     // Escape closes whichever modal is currently open — keyboard-only users
     // must be able to dismiss it without reaching for the mouse.
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modalUpload.classList.contains('open')) {
-            closeUploadModal();
-        }
+        if (e.key !== 'Escape') return;
+        if (modalUpload.classList.contains('open')) closeUploadModal();
+        if (modalDetail.classList.contains('open')) closeDetailModal();
     });
 
     const dropzone = document.getElementById('dropzone');
@@ -613,6 +850,157 @@
             await loadDashboard();
         }, 1200);
     });
+
+    // ---------- Guided Tour (adapted from ORBIT GeoMutasi's admin.js Tour pattern:
+    // same spotlight/popover mechanism, kept self-contained here since only the
+    // dashboard page needs it) ----------
+    const Tour = (() => {
+        let steps = [];
+        let index = 0;
+        let overlay = null;
+        let placeToken = 0;
+        let resizeTimer = null;
+
+        function build() {
+            overlay = document.createElement('div');
+            overlay.className = 'tour-overlay';
+            overlay.hidden = true;
+            overlay.innerHTML = `
+                <div class="tour-dim"></div>
+                <div class="tour-spotlight-ring"></div>
+                <div class="tour-popover" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+                    <button type="button" class="tour-close" aria-label="Tutup panduan">&times;</button>
+                    <span class="tour-popover__step"></span>
+                    <h4 id="tour-title"></h4>
+                    <p></p>
+                    <div class="tour-popover__actions">
+                        <button type="button" class="tour-popover__skip">Lewati</button>
+                        <div class="tour-popover__nav">
+                            <button type="button" class="btn btn-secondary" data-tour-back>Kembali</button>
+                            <button type="button" class="btn btn-primary" data-tour-next>Lanjut</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            overlay.querySelector('.tour-close').addEventListener('click', stop);
+            overlay.querySelector('.tour-popover__skip').addEventListener('click', stop);
+            overlay.querySelector('[data-tour-back]').addEventListener('click', back);
+            overlay.querySelector('[data-tour-next]').addEventListener('click', next);
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) stop(); });
+            window.addEventListener('resize', onViewportChange);
+        }
+
+        function onViewportChange() {
+            if (!overlay || overlay.hidden) return;
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => place(), 150);
+        }
+
+        function isWellInView(rect, margin) {
+            return rect.top >= margin && rect.left >= margin &&
+                rect.bottom <= (window.innerHeight - margin) &&
+                rect.right <= (window.innerWidth - margin);
+        }
+
+        function waitUntilSettled(target, token, onSettled) {
+            const startedAt = Date.now();
+            const maxWaitMs = 1200;
+            const pollMs = 40;
+            let lastRect = target.getBoundingClientRect();
+            let stableTicks = 0;
+
+            function tick() {
+                if (token !== placeToken) return;
+                const rect = target.getBoundingClientRect();
+                const moved = Math.abs(rect.top - lastRect.top) > 0.5 || Math.abs(rect.left - lastRect.left) > 0.5;
+                lastRect = rect;
+                stableTicks = moved ? 0 : stableTicks + 1;
+                if (stableTicks >= 3 || Date.now() - startedAt >= maxWaitMs) {
+                    onSettled(rect);
+                    return;
+                }
+                setTimeout(tick, pollMs);
+            }
+            setTimeout(tick, pollMs);
+        }
+
+        function renderAt(rect) {
+            const ring = overlay.querySelector('.tour-spotlight-ring');
+            const pop = overlay.querySelector('.tour-popover');
+            const pad = 8;
+            ring.style.top = (rect.top - pad) + 'px';
+            ring.style.left = (rect.left - pad) + 'px';
+            ring.style.width = (rect.width + pad * 2) + 'px';
+            ring.style.height = (rect.height + pad * 2) + 'px';
+
+            const popW = 320;
+            let top = rect.bottom + 16;
+            let left = Math.min(Math.max(8, rect.left), window.innerWidth - popW - 8);
+            if (top + 200 > window.innerHeight) top = Math.max(8, rect.top - 16 - 200);
+            pop.style.top = top + 'px';
+            pop.style.left = left + 'px';
+            overlay.classList.remove('is-positioning');
+        }
+
+        function place() {
+            const step = steps[index];
+            const target = step.selector ? document.querySelector(step.selector) : null;
+            const pop = overlay.querySelector('.tour-popover');
+
+            pop.querySelector('.tour-popover__step').textContent = `Langkah ${index + 1} dari ${steps.length}`;
+            pop.querySelector('h4').textContent = step.title;
+            pop.querySelector('p').textContent = step.description;
+            pop.querySelector('[data-tour-back]').style.visibility = index === 0 ? 'hidden' : 'visible';
+            pop.querySelector('[data-tour-next]').textContent = index === steps.length - 1 ? 'Selesai' : 'Lanjut';
+
+            const token = ++placeToken;
+
+            if (!target) {
+                renderAt({ top: window.innerHeight / 2 - 10, left: window.innerWidth / 2 - 10, width: 20, height: 20, bottom: window.innerHeight / 2 + 10, right: window.innerWidth / 2 + 10 });
+                return;
+            }
+
+            const currentRect = target.getBoundingClientRect();
+            if (isWellInView(currentRect, 24)) {
+                renderAt(currentRect);
+                return;
+            }
+
+            overlay.classList.add('is-positioning');
+            target.scrollIntoView({ block: 'center', behavior: 'auto' });
+            waitUntilSettled(target, token, (rect) => {
+                if (token !== placeToken) return;
+                renderAt(rect);
+            });
+        }
+
+        function next() { if (index < steps.length - 1) { index++; place(); } else { stop(); } }
+        function back() { if (index > 0) { index--; place(); } }
+        function stop() { if (overlay) overlay.hidden = true; }
+        function start(newSteps) {
+            if (!newSteps || newSteps.length === 0) return;
+            if (!overlay) build();
+            steps = newSteps.filter((s) => !s.selector || document.querySelector(s.selector));
+            if (steps.length === 0) return;
+            index = 0;
+            overlay.hidden = false;
+            place();
+        }
+        return { start, stop };
+    })();
+
+    const DASHBOARD_TOUR_STEPS = [
+        { selector: '#select-history', title: 'Pilih Periode / Histori', description: 'Pilih periode Realisasi SH/AP terbaru, atau salah satu snapshot histori untuk melihat data pada tanggal upload tertentu (mode inspeksi).' },
+        { selector: '#btn-open-upload', title: 'Upload Realisasi SH/AP', description: 'Unggah template FTK & realisasi terbaru untuk satu SH/AP. Setiap upload tersimpan sebagai snapshot baru tanpa menghapus data lama.' },
+        { selector: '.tabs', title: 'Dashboard & Histori Upload', description: 'Beralih antara tampilan Dashboard dan daftar seluruh Histori Upload, tanpa berpindah halaman.' },
+        { selector: '.kpi-row', title: 'KPI Utama', description: 'Ringkasan Total FTK, Total Realisasi, Pemenuhan, dan Gap untuk periode/snapshot yang sedang dipilih.' },
+        { selector: '.shap-grid', title: 'Sebaran per SH/AP', description: 'Persentase pemenuhan dan gap tiap SH/AP untuk periode/snapshot terpilih.' },
+        { selector: '.priority-card', title: 'Status Prioritas Pemenuhan', description: 'Pengelompokan SH/AP berdasarkan ambang batas pemenuhan: ≥100%, 90–99,9%, dan <90%.' },
+        { selector: '.tree-toolbar', title: 'Pencarian & Filter Drill-down', description: 'Cari organisasi/jabatan, atau filter berdasarkan jenjang jabatan, Position Grade, dan status gap.' },
+        { selector: '#tree-table', title: 'Drill-down FTK', description: 'Klik ikon "+" untuk memperluas struktur organisasi sampai ke jabatan, lengkap dengan rincian per jenjang.' },
+    ];
+
+    document.getElementById('btn-dashboard-guide').addEventListener('click', () => Tour.start(DASHBOARD_TOUR_STEPS));
 
     // ---------- Init ----------
     (async function init() {

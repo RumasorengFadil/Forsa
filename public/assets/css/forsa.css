@@ -60,6 +60,7 @@ a { color: inherit; }
 .topbar { background: #fff; border-bottom: 1px solid var(--border); padding: 10px 24px; display: flex; align-items: center; justify-content: space-between; }
 .topbar-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
 .topbar-brand .badge { width: 30px; height: 30px; border-radius: 8px; background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.topbar-brand .badge-logo { background: none; object-fit: contain; }
 .topbar-nav { display: flex; gap: 6px; }
 .topbar-nav a { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--ink-soft); text-decoration: none; }
 .topbar-nav a.active, .topbar-nav a:hover { background: #eef2fb; color: var(--blue); }
@@ -69,7 +70,9 @@ a { color: inherit; }
 
 /* ---------- Dashboard header ---------- */
 .dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
-.dash-title h2 { margin: 0; font-size: 22px; letter-spacing: .2px; }
+.dash-title h2 { margin: 0; font-size: 22px; letter-spacing: .2px; display: flex; align-items: center; gap: 10px; }
+.help-btn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--blue); background: #fff; color: var(--blue); font-size: 13px; font-weight: 800; line-height: 1; cursor: pointer; flex: 0 0 auto; }
+.help-btn:hover { background: var(--blue); color: #fff; }
 .dash-title .period-label { color: var(--ink-soft); font-size: 13px; margin-top: 2px; }
 .dash-controls { display: flex; gap: 10px; align-items: center; }
 .select-history { font: inherit; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--border); background: #fff; min-width: 260px; font-weight: 600; font-size: 13px; }
@@ -107,6 +110,15 @@ a { color: inherit; }
 .shap-card .shap-name { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
 .shap-card .shap-pct { font-size: 19px; font-weight: 800; }
 .shap-card .shap-gap { color: var(--ink-soft); font-size: 12px; float: right; margin-top: 6px; }
+
+/* Drilldown-clickable KPI elements (Tahap 3) — the pointer/hover affordance
+   only appears where a click actually opens a detail modal. */
+.shap-card.clickable, .bar-row.clickable, .stack-bar-row.clickable { cursor: pointer; border-radius: 8px; transition: background .12s ease; }
+.shap-card.clickable:hover, .shap-card.clickable:focus-visible { border-color: var(--blue); background: #f8faff; }
+.bar-row.clickable:hover, .stack-bar-row.clickable:hover,
+.bar-row.clickable:focus-visible, .stack-bar-row.clickable:focus-visible { background: #f8faff; }
+.bar-row.clickable:hover .bar-label, .stack-bar-row.clickable:hover .bar-label,
+.bar-row.clickable:focus-visible .bar-label, .stack-bar-row.clickable:focus-visible .bar-label { color: var(--blue); }
 .pct-green { color: var(--green); }
 .pct-amber { color: var(--amber); }
 .pct-red { color: var(--red); }
@@ -144,13 +156,53 @@ a { color: inherit; }
 /* ---------- Tree table ---------- */
 .tree-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; align-items: center; }
 .tree-toolbar input, .tree-toolbar select { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px; }
-.tree-scroll { overflow: auto; max-height: 640px; border: 1px solid var(--border); border-radius: 10px; }
-.tree-table { border-collapse: collapse; font-size: 12px; min-width: 1400px; width: 100%; }
+/* Fixed height (not max-height): with max-height the box shrank to fit
+   whatever content happened to be expanded, so a SH/AP with few rows made
+   the whole card — and the dashboard layout around it — visibly collapse.
+   A firm height keeps the drilldown area a consistent size regardless of
+   row count, with clamp() scaling it to the viewport (70vh) between a
+   420px floor (short laptop screens) and a 640px ceiling (matching the
+   previous max-height, so large screens look unchanged) — never taller
+   than the content needs it to be able to shrink for, but also never
+   shorter just because there's little data. Scroll stays internal via
+   overflow:auto exactly as before. */
+.tree-scroll { overflow: auto; height: clamp(420px, 70vh, 640px); border: 1px solid var(--border); border-radius: 10px; }
+/* border-spacing:0 + separate (not collapse) sidesteps assorted Chrome/Safari
+   sticky-table-cell rendering bugs; visually identical since we only ever
+   set border-bottom (never border-top), so nothing doubles up. */
+.tree-table { border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 1400px; width: 100%; }
 .tree-table th, .tree-table td { border-bottom: 1px solid #f0f2f7; padding: 6px 8px; white-space: nowrap; }
-.tree-table thead th { position: sticky; top: 0; background: #f7f9fc; z-index: 3; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; font-size: 10.5px; letter-spacing: .3px; }
-.tree-table thead tr.group-row th { background: #eef2f9; text-align: center; border-left: 1px solid #dfe5ef; }
+/* Two stacked sticky header layers (Tahap 5):
+   - tr.group-row (jenjang labels: TOTAL/MA/MM/...) sticks at top:0.
+   - the metric sub-header row underneath it (FTK/Organik/...) sticks at
+     top:var(--tree-header1-h), a px value dashboard.js measures from the
+     *actual* rendered height of tr.group-row after each render — not a
+     guessed constant — so the two rows are always exactly adjacent, never
+     overlapping, regardless of font metrics/zoom. The 25px fallback only
+     covers the first paint frame before JS has measured anything.
+   The name column header ("UNIT/ORGANISASI/JABATAN") is deliberately two
+   separate single-row <th class="col-name"> cells (row 1 has the label, row
+   2 is empty), not one rowspan=2 cell — a cell sticky on both axes (top AND
+   left) at once loses correct z-index stacking against its row siblings in
+   Chrome/Safari once the table scrolls horizontally, which made the label
+   appear to jump down next to the metric row instead of the group row. Two
+   plain cells with matching background/borders look identical and avoid
+   that bug entirely, since each is only ever sticky the same single way its
+   own row already is. z-index, top to bottom: name column header cells (8,
+   highest in their own row so they win over the group/sub header cells they
+   sit beside) > group-row (6) > metric sub-header (5) > sticky name column
+   body cells (2). */
+.tree-table thead th { position: sticky; background: #f7f9fc; z-index: 3; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; font-size: 10.5px; letter-spacing: .3px; }
+.tree-table thead tr.group-row th { top: 0; z-index: 6; background: #eef2f9; text-align: center; border-left: 1px solid #dfe5ef; }
+.tree-table thead tr:not(.group-row) th { top: var(--tree-header1-h, 25px); z-index: 5; }
 .tree-table td.col-name, .tree-table th.col-name { position: sticky; left: 0; background: #fff; z-index: 2; text-align: left; min-width: 340px; max-width: 440px; white-space: normal; }
-.tree-table thead th.col-name { background: #f7f9fc; z-index: 4; }
+/* "tr" is repeated (vs. just "thead th.col-name") purely to match/exceed the
+   ".tree-table thead tr.group-row th" rule's specificity (3 elements + 2
+   classes) — without it, that rule's z-index/background silently won even
+   though this one is declared later, which was the actual cause of the
+   header-swap-on-horizontal-scroll bug (col-name was computing to
+   group-row's z-index:6 and #eef2f9 background instead of its own). */
+.tree-table thead tr th.col-name { background: #f7f9fc; z-index: 8; border-left: none; }
 .tree-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .tree-table tbody tr:nth-child(even) td.col-name { background: #fafbfd; }
 .tree-table tbody tr:hover td { background: #f2f6ff; }
@@ -163,6 +215,11 @@ a { color: inherit; }
 .sisa-pos { color: var(--red); font-weight: 700; }
 .sisa-zero { color: var(--ink-soft); }
 .sisa-neg { color: var(--green); font-weight: 700; }
+
+/* One-off highlight when "Lihat di Drill-down Tree" (Tahap 3) scrolls to and
+   expands a SH/AP row — plays once, never loops (no perpetual motion). */
+@keyframes rowFlash { from { background: #dde9fb; } to { background: transparent; } }
+.tree-table tbody tr.row-flash td { animation: rowFlash 1.6s ease; }
 
 .section-title { font-size: 15px; font-weight: 800; margin: 28px 0 14px; }
 
@@ -251,6 +308,25 @@ a { color: inherit; }
     .form-grid { grid-template-columns: 1fr; }
 }
 
+/* ---------- Guided Tour (adapted from ORBIT GeoMutasi's admin.js Tour pattern) ---------- */
+.tour-overlay { position: fixed; inset: 0; z-index: 4000; }
+.tour-overlay[hidden] { display: none; }
+.tour-dim { position: absolute; inset: 0; background: rgba(10, 20, 30, .55); }
+.tour-spotlight-ring { position: absolute; z-index: 4001; border-radius: 10px; box-shadow: 0 0 0 4px var(--blue), 0 0 0 9999px rgba(10, 20, 30, .55); transition: top .2s ease, left .2s ease, width .2s ease, height .2s ease, opacity .15s ease; pointer-events: none; }
+.tour-popover { position: absolute; z-index: 4002; width: min(320px, calc(100vw - 32px)); padding: 18px; border-radius: 12px; background: #fff; box-shadow: var(--shadow-modal); transition: top .2s ease, left .2s ease, opacity .15s ease; }
+.tour-overlay.is-positioning .tour-spotlight-ring,
+.tour-overlay.is-positioning .tour-popover { opacity: 0; transition: none; pointer-events: none; }
+.tour-popover__step { display: block; margin-bottom: 6px; color: var(--blue); font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.tour-popover h4 { margin: 0 0 8px; font-size: 15px; color: var(--ink); }
+.tour-popover p { margin: 0 0 16px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.55; }
+.tour-popover__actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tour-popover__nav { display: flex; gap: 8px; }
+.tour-popover__skip { background: none; border: 0; color: var(--ink-soft); font-size: 12px; font-weight: 700; cursor: pointer; padding: 8px 4px; }
+.tour-popover__skip:hover { color: var(--ink); text-decoration: underline; }
+.tour-popover .btn { min-height: 32px; padding: 6px 14px; font-size: 12.5px; }
+.tour-close { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: none; color: var(--ink-soft); font-size: 14px; cursor: pointer; }
+.tour-close:hover { background: var(--bg); color: var(--ink); }
+
 /* Visible keyboard focus ring across the app (buttons, links, inputs, tree toggles) —
    never suppressed, so keyboard-only navigation stays usable (R-03/C-4). */
 a:focus-visible,
@@ -258,6 +334,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
+[role="button"]:focus-visible,
 .tree-toggle:focus-visible {
     outline: 2px solid var(--blue);
     outline-offset: 2px;

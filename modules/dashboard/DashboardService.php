@@ -251,6 +251,9 @@ final class DashboardService
             ],
             'gap_terbesar' => $gapTerbesar,
             'per_jenjang' => $perJenjang,
+            // Canonical tree-column order (Tahap 4), independent of per_jenjang's
+            // FTK-descending sort used only for the bar chart above.
+            'job_level_order' => JobLevelMapper::orderedGroups(),
             'insight' => $insight,
             'coverage' => [
                 'available' => count($snapshotRows),

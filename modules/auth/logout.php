@@ -10,4 +10,4 @@ if ($user) {
 }
 
 logout_user();
-redirect('/login.php');
+redirect('/login');

@@ -26,7 +26,10 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
     <div class="page-wrap">
         <div class="dash-header">
             <div class="dash-title">
-                <h2>FTK WORKFORCE MONITORING DASHBOARD</h2>
+                <h2>
+                    FTK WORKFORCE MONITORING DASHBOARD
+                    <button type="button" class="help-btn" id="btn-dashboard-guide" aria-label="Bantuan / mulai panduan halaman dashboard" title="Panduan halaman">!</button>
+                </h2>
                 <div class="period-label" id="period-label">Memuat…</div>
             </div>
             <div class="dash-controls">
@@ -122,6 +125,19 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
             <button class="btn btn-primary" id="btn-next-upload">Validasi &amp; Preview</button>
             <button class="btn btn-primary" id="btn-confirm-upload" style="display:none;">Konfirmasi Import</button>
         </div>
+    </div>
+</div>
+
+<!-- Detail Drilldown Modal (Tahap 3) — populated from data already fetched for
+     the dashboard/tree, never a separate calculation. -->
+<div class="modal-backdrop" id="modal-detail">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
+        <div class="modal-header">
+            <h3 id="detail-modal-title">Detail</h3>
+            <button class="modal-close" data-close aria-label="Tutup">&times;</button>
+        </div>
+        <div class="modal-body" id="detail-modal-body"></div>
+        <div class="modal-footer" id="detail-modal-footer"></div>
     </div>
 </div>
 

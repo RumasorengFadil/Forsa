@@ -23,17 +23,22 @@ return [
         'junior expert' => 'Junior Expert',
     ],
 
-    // Display order for job level groups across dashboard & tree
+    // Canonical column order for the FTK drilldown tree (Tahap 4):
+    // Total → MA → MM → MD → SR. SPECIALIST → SPECIALIST → GEN 1-3 → SR. EXPERT → EXPERT → JR. EXPERT
+    // ("Total" is added separately by the frontend, not listed here).
+    // This does NOT affect the "Pemenuhan FTK per Jenjang Jabatan" dashboard
+    // bar chart, which is independently sorted by FTK size for readability
+    // (see DashboardService::buildDashboard()).
     'job_level_order' => [
-        'gen 1-3',
-        'MD',
-        'MM',
         'MA',
-        'spesialist',
+        'MM',
+        'MD',
         'Senior Specialist',
-        'Junior Expert',
-        'Expert',
+        'spesialist',
+        'gen 1-3',
         'Senior Expert',
+        'Expert',
+        'Junior Expert',
     ],
 
     'job_level_labels' => [

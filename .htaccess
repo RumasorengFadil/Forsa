@@ -3,6 +3,14 @@ RewriteEngine On
 RewriteCond %{REQUEST_URI} ^/assets/
 RewriteRule ^assets/(.*)$ public/assets/$1 [L]
 
+# Application internals must always go through router.php — without this,
+# Apache would serve e.g. /modules/dashboard/dashboard.php directly as a
+# static file request (bypassing router.php's clean-URL/redirect handling),
+# since that path IS a real file on disk. The PHP built-in dev server never
+# has this gap (router.php sees every request), so this keeps prod matching
+# dev.
+RewriteRule ^(modules|shared|config|database|tools)/ - [F,L]
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^(.*)$ router.php [QSA,L]
