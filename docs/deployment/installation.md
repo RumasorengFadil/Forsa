@@ -11,7 +11,7 @@
 ```bash
 composer install
 cp .env.example .env
-# sesuaikan DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD
+# sesuaikan DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD, DB_SCHEMA
 
 createdb forsa   # jika database belum ada
 

@@ -30,7 +30,16 @@ final class Database
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
 
-        self::$instance->exec('SET search_path TO forsa, public');
+        // Schema name can't be bound as a PDO parameter in a SET command, so
+        // it's validated against a strict identifier pattern instead
+        // (config-only value, but a malformed DB_SCHEMA should fail loudly
+        // rather than silently break every query or open a SQL injection
+        // path).
+        $schema = (string) $config['schema'];
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $schema)) {
+            throw new \RuntimeException("DB_SCHEMA tidak valid: \"{$schema}\". Hanya huruf, angka, dan underscore (tidak diawali angka) yang diperbolehkan.");
+        }
+        self::$instance->exec("SET search_path TO {$schema}, public");
 
         return self::$instance;
     }

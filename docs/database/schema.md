@@ -1,6 +1,6 @@
 # Skema Database — `forsa`
 
-Semua tabel berada pada schema Postgres `forsa` (lihat `config/database.php` + `Database::connection()` yang men-set `search_path`).
+Semua tabel berada pada schema Postgres `forsa` secara default. Nama schema dikonfigurasi lewat `DB_SCHEMA` di `.env` (fallback ke `forsa` kalau tidak diisi) — dibaca terpusat di `config/database.php` dan dipakai oleh `Database::connection()` untuk men-set `search_path` (`SET search_path TO <schema>, public`), jadi seluruh query di aplikasi otomatis mengarah ke schema tersebut tanpa perlu menulis prefix schema di masing-masing query. Migration di `database/migrations/` tetap membuat schema bernama `forsa` secara hardcoded (`CREATE SCHEMA IF NOT EXISTS forsa`) — kalau `DB_SCHEMA` diisi nama lain, migration perlu disesuaikan manual supaya membuat schema dengan nama yang sama.
 
 | Tabel | Fungsi |
 |---|---|
