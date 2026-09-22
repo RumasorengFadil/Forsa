@@ -17,7 +17,7 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FTK Workforce Monitoring Dashboard — FORSA</title>
-<link rel="stylesheet" href="/assets/css/forsa.css">
+<link rel="stylesheet" href="assets/css/forsa.css">
 </head>
 <body>
 <div class="app-shell">
@@ -144,6 +144,6 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
 <script>
     const CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;
 </script>
-<script src="/assets/js/dashboard.js"></script>
+<script src="assets/js/dashboard.js"></script>
 </body>
 </html>

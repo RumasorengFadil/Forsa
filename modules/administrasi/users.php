@@ -50,7 +50,7 @@ $messages = flash_all();
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Manajemen User — FORSA</title>
-<link rel="stylesheet" href="/assets/css/forsa.css">
+<link rel="stylesheet" href="assets/css/forsa.css">
 </head>
 <body>
 <div class="app-shell">
@@ -152,6 +152,6 @@ $messages = flash_all();
 </div>
 
 <script>const CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;</script>
-<script src="/assets/js/users.js"></script>
+<script src="assets/js/users.js"></script>
 </body>
 </html>

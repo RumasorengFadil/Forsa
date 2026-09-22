@@ -21,7 +21,7 @@ function forsa_brand_logo_url(): ?string
     $candidates = ['pln-logo-mark.svg', 'pln-logo-mark.png', 'pln-logo-mark.webp', 'pln-logo.svg', 'pln-logo.png', 'pln-logo.webp'];
     foreach ($candidates as $file) {
         if (is_file(dirname(__DIR__) . '/public/assets/img/' . $file)) {
-            $resolved = '/assets/img/' . $file;
+            $resolved = 'assets/img/' . $file;
             return $resolved;
         }
     }
@@ -44,12 +44,12 @@ function render_topbar(array $user, string $active = 'dashboard'): void
             <span>FORSA PLN</span>
         </div>
         <nav class="topbar-nav">
-            <a href="/dashboard" class="<?= $active === 'dashboard' ? 'active' : '' ?>">Dashboard</a>
-            <a href="/users" class="<?= $active === 'users' ? 'active' : '' ?>">Manajemen User</a>
+            <a href="dashboard" class="<?= $active === 'dashboard' ? 'active' : '' ?>">Dashboard</a>
+            <a href="users" class="<?= $active === 'users' ? 'active' : '' ?>">Manajemen User</a>
         </nav>
         <div class="topbar-user">
             <span><?= e($user['name']) ?></span>
-            <a href="/logout.php" class="btn btn-secondary btn-sm">Keluar</a>
+            <a href="logout.php" class="btn btn-secondary btn-sm">Keluar</a>
         </div>
     </div>
 <?php

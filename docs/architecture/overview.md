@@ -39,3 +39,12 @@ Dashboard **tidak pernah** membaca file Excel langsung — hanya snapshot databa
 3. **Histori Upload tab** — daftar seluruh `forsa_import_jobs` (paginated) via `upload_history_api.php`.
 
 Ketiganya berada pada satu halaman (`dashboard.php`) tanpa reload penuh, sesuai instruksi implementasi.
+
+## Routing subfolder-agnostic (Apache)
+
+`router.php` dan `.htaccess` mendukung app dijalankan baik di document root maupun di subfolder (mis. `htdocs/Forsa` di MAMP), mengikuti pola yang dipakai proyek `pln_orbit`:
+
+- `.htaccess` melempar setiap request yang bukan file/folder fisik ke `router.php?_forsa_route=$1`. `$1` di sini ditangkap **relatif terhadap direktori `.htaccess` itu sendiri** (perilaku default mod_rewrite per-direktori), jadi otomatis sudah bersih dari prefix subfolder apa pun — tidak perlu tahu di subfolder mana app itu berada.
+- `router.php` membaca rute dari `_forsa_route` (jika ada, berarti jalan lewat Apache) dan hanya jatuh balik ke parsing `REQUEST_URI` untuk kasus `php -S` (built-in server tidak pernah membaca `.htaccess`, dan selalu menyajikan proyek ini sebagai document root sehingga `REQUEST_URI` memang sudah bersih).
+- Semua `href`/`action`/`fetch()`/`redirect()` internal (menu, login, aset CSS/JS/gambar, panggilan AJAX di `dashboard.js`/`users.js`) sengaja ditulis **relatif tanpa leading slash** (`assets/css/forsa.css`, bukan `/assets/css/forsa.css`; `redirect('dashboard')`, bukan `redirect('/dashboard')`). Karena semua halaman FORSA berada satu level (tidak ada nesting seperti `/dashboard/detail`), path relatif ini otomatis di-resolve browser terhadap folder app yang benar, baik di root maupun di subfolder — tanpa perlu helper base-URL seperti `orbitMenuUrl()` di `pln_orbit` (yang perlu itu karena ada halaman bersarang di kedalaman berbeda).
+- Request ke root folder app itu sendiri dengan trailing slash (`/Forsa/` di subfolder, atau `/` di document root) punya rule tersendiri di `.htaccess` (`RewriteRule ^$ router.php?_forsa_route=`), karena itu satu-satunya path yang secara fisik memang sebuah direktori — rule catch-all sengaja punya kondisi `!-d` (supaya folder aplikasi seperti `modules/`/`assets/` tidak ikut tertelan rewrite), yang tanpa rule khusus ini membuat Apache jatuh ke directory listing bawaan dan berakhir `403 Forbidden` (diblokir `Options -Indexes`) alih-alih masuk ke `router.php`.

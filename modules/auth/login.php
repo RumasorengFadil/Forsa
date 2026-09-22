@@ -5,7 +5,7 @@ declare(strict_types=1);
 require __DIR__ . '/../../shared/bootstrap.php';
 
 if (current_user()) {
-    redirect('/dashboard');
+    redirect('dashboard');
 }
 
 $messages = flash_all();
@@ -17,7 +17,7 @@ $messages = flash_all();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login — FORSA PLN</title>
-    <link rel="stylesheet" href="/assets/css/forsa.css">
+    <link rel="stylesheet" href="assets/css/forsa.css">
 </head>
 
 <body class="login-body">
@@ -35,7 +35,7 @@ $messages = flash_all();
                 <div class="alert alert-<?= e($m['type']) ?>"><?= e($m['message']) ?></div>
             <?php endforeach; ?>
 
-            <form method="post" action="/login_submit.php" class="login-form">
+            <form method="post" action="login_submit.php" class="login-form">
                 <?= csrf_field() ?>
                 <label>Email
                     <input type="email" name="email" required autofocus placeholder="admin@forsa.local">

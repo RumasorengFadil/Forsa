@@ -1,6 +1,17 @@
 RewriteEngine On
 
-RewriteCond %{REQUEST_URI} ^/assets/
+# Request ke root folder app itu sendiri (mis. /Forsa/ dengan trailing
+# slash, atau / kalau di-deploy di document root) tidak pernah dicoba oleh
+# rule catch-all di bawah, karena kondisinya (!-d) sengaja FALSE untuk path
+# yang memang sebuah direktori fisik -- tanpa rule ini, Apache jatuh ke
+# directory listing bawaan, yang diblokir oleh "Options -Indexes" di bawah
+# dan berakhir 403 Forbidden alih-alih masuk ke router.php.
+RewriteRule ^$ router.php?_forsa_route= [L,QSA]
+
+# No REQUEST_URI condition here on purpose: %{REQUEST_URI} is always the
+# absolute path (still carrying a subfolder prefix like /Forsa/ if present),
+# while the RewriteRule pattern below is matched relative to this .htaccess's
+# own directory -- so the plain pattern match is what stays subfolder-safe.
 RewriteRule ^assets/(.*)$ public/assets/$1 [L]
 
 # Application internals must always go through router.php — without this,
@@ -11,9 +22,15 @@ RewriteRule ^assets/(.*)$ public/assets/$1 [L]
 # dev.
 RewriteRule ^(modules|shared|config|database|tools)/ - [F,L]
 
+# $1 here is captured relative to this .htaccess's own directory (Apache's
+# per-directory rewrite matching), not the absolute URL path -- so this keeps
+# working unchanged whether the app sits at the web server's document root or
+# under a subfolder (e.g. htdocs/Forsa). router.php reads it from
+# _forsa_route instead of parsing REQUEST_URI, which would otherwise still
+# carry that subfolder prefix and break route_map.php lookups.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ router.php [QSA,L]
+RewriteRule ^(.*)$ router.php?_forsa_route=$1 [QSA,L]
 
 <FilesMatch "\.(env|sql|md)$">
     Require all denied

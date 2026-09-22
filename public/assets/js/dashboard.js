@@ -13,7 +13,7 @@
 
     // ---------- History dropdown ----------
     async function loadHistoryOptions() {
-        const res = await fetch('/history_api.php');
+        const res = await fetch('history_api.php');
         const json = await res.json();
         const opts = json.data;
         const select = document.getElementById('select-history');
@@ -58,7 +58,7 @@
         const content = document.getElementById('dashboard-content');
         content.innerHTML = renderKpiSkeleton();
 
-        const res = await fetch('/dashboard_api.php?selection=' + encodeURIComponent(currentSelection || ''));
+        const res = await fetch('dashboard_api.php?selection=' + encodeURIComponent(currentSelection || ''));
         const json = await res.json();
         if (!json.success) {
             content.innerHTML = `<div class="empty-state"><h3>Gagal memuat data</h3><p>${json.message}</p></div>`;
@@ -347,7 +347,7 @@
             gap_status: treeFilters.gap_status,
         });
         if (shapCode) params.set('shap', shapCode);
-        const res = await fetch('/ftk_tree_api.php?' + params.toString());
+        const res = await fetch('ftk_tree_api.php?' + params.toString());
         const json = await res.json();
         return json.success ? json.data.nodes : [];
     }
@@ -635,7 +635,7 @@
         const shapId = document.getElementById('history-shap-filter').value;
         const params = new URLSearchParams({ page });
         if (shapId) params.set('shap_id', shapId);
-        const res = await fetch('/upload_history_api.php?' + params.toString());
+        const res = await fetch('upload_history_api.php?' + params.toString());
         const json = await res.json();
         if (!json.success) { wrap.innerHTML = `<p>${json.message}</p>`; return; }
         const d = json.data;
@@ -761,7 +761,7 @@
         fd.append('file', fileInput.files[0]);
         fd.append('_csrf', CSRF_TOKEN);
 
-        const res = await fetch('/upload_submit.php?action=preview', { method: 'POST', body: fd });
+        const res = await fetch('upload_submit.php?action=preview', { method: 'POST', body: fd });
         const json = await res.json();
 
         btn.disabled = false;
@@ -829,7 +829,7 @@
         fd.append('note', document.getElementById('up-note').value);
         fd.append('_csrf', CSRF_TOKEN);
 
-        const res = await fetch('/upload_submit.php?action=confirm', { method: 'POST', body: fd });
+        const res = await fetch('upload_submit.php?action=confirm', { method: 'POST', body: fd });
         const json = await res.json();
 
         if (!json.success) {

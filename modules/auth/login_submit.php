@@ -7,12 +7,12 @@ require __DIR__ . '/../../shared/bootstrap.php';
 use Forsa\Database;
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    redirect('/login');
+    redirect('login');
 }
 
 if (!csrf_verify($_POST['_csrf'] ?? null)) {
     flash_set('error', 'Sesi form kedaluwarsa, silakan coba lagi.');
-    redirect('/login');
+    redirect('login');
 }
 
 $email = trim((string) ($_POST['email'] ?? ''));
@@ -20,7 +20,7 @@ $password = (string) ($_POST['password'] ?? '');
 
 if ($email === '' || $password === '') {
     flash_set('error', 'Email dan password wajib diisi.');
-    redirect('/login');
+    redirect('login');
 }
 
 $pdo = Database::connection();
@@ -31,12 +31,12 @@ $user = $stmt->fetch();
 if (!$user || !password_verify($password, $user['password_hash'])) {
     audit_log(null, 'LOGIN_FAILED', 'forsa_users', $email);
     flash_set('error', 'Email atau password salah.');
-    redirect('/login');
+    redirect('login');
 }
 
 if (!$user['is_active']) {
     flash_set('error', 'Akun Anda dinonaktifkan. Hubungi Super Admin.');
-    redirect('/login');
+    redirect('login');
 }
 
 $roles = $pdo->prepare(
@@ -57,4 +57,4 @@ login_user([
 $pdo->prepare('UPDATE forsa_users SET last_login_at = now() WHERE id = :id')->execute(['id' => $user['id']]);
 audit_log((int) $user['id'], 'LOGIN', 'forsa_users', (string) $user['id']);
 
-redirect('/dashboard');
+redirect('dashboard');

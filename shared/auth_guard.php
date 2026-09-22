@@ -18,7 +18,7 @@ function require_login(): array
         if (str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') || str_ends_with($requestPath, '_api.php')) {
             json_error('Sesi berakhir, silakan login kembali.', 401);
         }
-        redirect('/login');
+        redirect('login');
     }
     return $user;
 }

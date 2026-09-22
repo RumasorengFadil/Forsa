@@ -41,7 +41,7 @@
         const id = document.getElementById('user-id').value;
         const fd = new FormData(form);
         fd.append('_csrf', CSRF_TOKEN);
-        const url = id ? '/user_edit.php' : '/user_create.php';
+        const url = id ? 'user_edit.php' : 'user_create.php';
         const res = await fetch(url, { method: 'POST', body: fd });
         const json = await res.json();
         if (!json.success) { alert(json.message); return; }
@@ -55,7 +55,7 @@
             const fd = new FormData();
             fd.append('id', btn.dataset.id);
             fd.append('_csrf', CSRF_TOKEN);
-            const res = await fetch('/user_toggle_status.php', { method: 'POST', body: fd });
+            const res = await fetch('user_toggle_status.php', { method: 'POST', body: fd });
             const json = await res.json();
             if (!json.success) { alert(json.message); return; }
             location.reload();
@@ -68,7 +68,7 @@
             const fd = new FormData();
             fd.append('id', btn.dataset.id);
             fd.append('_csrf', CSRF_TOKEN);
-            const res = await fetch('/user_reset_password.php', { method: 'POST', body: fd });
+            const res = await fetch('user_reset_password.php', { method: 'POST', body: fd });
             const json = await res.json();
             if (!json.success) { alert(json.message); return; }
             alert(`Password baru: ${json.data.new_password}`);
