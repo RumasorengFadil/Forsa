@@ -3,12 +3,14 @@
 declare(strict_types=1);
 
 require __DIR__ . '/../../shared/bootstrap.php';
+require __DIR__ . '/../../shared/menu.php';
 
 if (current_user()) {
     redirect('dashboard');
 }
 
 $messages = flash_all();
+$logoUrl = forsa_brand_logo_url();
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -24,7 +26,11 @@ $messages = flash_all();
     <div class="login-wrap">
         <div class="login-card">
             <div class="login-brand">
-                <div class="login-logo">F</div>
+                <?php if ($logoUrl): ?>
+                    <img src="<?= e($logoUrl) ?>" alt="Logo PLN" class="login-logo badge-logo">
+                <?php else: ?>
+                    <div class="login-logo">F</div>
+                <?php endif; ?>
                 <div>
                     <h1>FORSA PLN</h1>
                     <p>Formasi &amp; Realisasi SH/AP</p>

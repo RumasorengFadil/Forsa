@@ -60,7 +60,7 @@ a { color: inherit; }
 .topbar { background: #fff; border-bottom: 1px solid var(--border); padding: 10px 24px; display: flex; align-items: center; justify-content: space-between; }
 .topbar-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
 .topbar-brand .badge { width: 30px; height: 30px; border-radius: 8px; background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-.topbar-brand .badge-logo { background: none; object-fit: contain; }
+.badge-logo { background: none; object-fit: contain; }
 .topbar-nav { display: flex; gap: 6px; }
 .topbar-nav a { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--ink-soft); text-decoration: none; }
 .topbar-nav a.active, .topbar-nav a:hover { background: #eef2fb; color: var(--blue); }
