@@ -103,11 +103,31 @@ Dilakukan di MAMP (Apache), akses via `http://localhost:8888/Forsa/...`
 Expected result: seluruh path di atas tetap 200 dan tidak membawa prefix
 ganda/salah — tercapai.
 
-**Belum ditest**: perilaku `php -S 127.0.0.1:8080 router.php` (dev server
-built-in) setelah perubahan ini — secara desain jalurnya tidak tersentuh
-(masih parsing `REQUEST_URI` langsung, sama seperti sebelumnya, karena
-`_forsa_route` tidak pernah di-set di jalur itu), tapi belum diverifikasi
-langsung dengan menjalankan servernya.
+Susulan: `php -S 127.0.0.1:8091 router.php` (dev server built-in) juga
+ditest lewat `curl` (bukan browser, tanpa GUI) untuk memastikan jalur
+`_forsa_route`-nya Apache tidak meregresi jalur `REQUEST_URI` langsung yang
+dipakai `php -S`:
+
+1. `GET /` → 200 (langsung serve halaman login, karena scriptName kosong
+   dipetakan ke `login`).
+2. `GET /login` → 200; `GET /assets/css/forsa.css` → 200
+   (`content-type: text/css`).
+3. `GET /dashboard.php` (URL lama) → `301` ke `/dashboard`.
+4. `GET /dashboard` tanpa sesi → `302` ke `/login`; `GET /login_submit.php`
+   lewat GET (bukan POST) → `302` ke `/login`.
+5. `GET /rute-tidak-ada` → `404`.
+6. Alur login penuh pakai `curl` + cookie jar dan user QA sementara: `POST
+   /login_submit.php` (email+password+`_csrf` dari halaman login) → `302`
+   ke `/dashboard`; `GET /dashboard` dengan cookie sesi → `200`, HTML-nya
+   memuat `href="dashboard"`, `href="users"`, `href="logout.php"`,
+   `src="assets/js/dashboard.js"` (semua relatif, sesuai desain); `GET
+   /assets/js/dashboard.js` → `200`; `GET /dashboard_api.php?...` → `200`;
+   `GET /users` → `200`; `GET /logout.php` → `302` ke `/login`.
+
+Expected result: seluruh status code & redirect target di atas sesuai
+perilaku sebelum perubahan (tidak ada regresi pada jalur `php -S`) —
+tercapai. Server test dihentikan setelah selesai; user QA sementara
+dikembalikan ke `is_active = false`.
 
 ## Known Limitations
 
