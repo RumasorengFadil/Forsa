@@ -16,6 +16,16 @@ Fitur terpisah dari produk inti FORSA (dashboard FTK/realisasi), diimplementasik
 | 8 — Performance | **Selesai** | Cache file-based `AiQueryCache` (PRD §20, key `ai:{scope_hash}:{query_hash}`, TTL 5 menit), diverifikasi 240x lebih cepat untuk query berulang & tidak bocor lintas scope. Index/MV: tidak ada perubahan, sudah dianalisis cukup di `database-sources.md` §6. |
 | 9 — Evaluation | **Selesai (sebagian otomatis)** | `tools/ai_evaluation_cli.php` — 10 skenario deterministik PRD §53 (semua PASS, repeatable). 2 kategori yang butuh penalaran LLM (follow-up context, ambiguous query) diuji manual — lihat laporan Tahap 6. |
 
+## Pembaruan Pasca-MVP
+
+Setelah 9 phase di atas selesai, dilakukan pembaruan tambahan (di luar penomoran phase PRD, tapi tetap dalam scope AI Assistant), masing-masing dengan laporan tersendiri di `docs/reports/2026/09/23/ai_assistant_update_tahapN_*.md`:
+
+1. **Config Maskot** — durasi rotasi greeting (`MASCOT_GREETING_INTERVAL_MS`) dipindah dari hardcode ke `.env`/`config/ai.php`.
+2. **Expand/Collapse Sidebar** — ikon di header sidebar untuk memperbesar (~50% lebar layar) / mengecilkan kembali sidebar chat.
+3. **Render Markdown Chatbot** — balasan assistant (bold/italic/kode/list) dirender sebagai HTML sungguhan, bukan simbol Markdown mentah.
+4. **Metadata Jawaban** — execution time, model, dan sumber jawaban ditampilkan ringkas di bawah tiap balasan.
+5. **Progress Time** — elapsed time realtime ("Menyusun jawaban... 3.2s") selama menunggu, diganti execution time final saat selesai.
+
 ## Catatan Implementasi
 
 - Mascot Phase 1 adalah **placeholder SVG 2D**, bukan aset 3D (`.glb`) final yang disebut PRD §41 — pembuatan model 3D adalah pekerjaan produksi aset terpisah (butuh 3D artist/pipeline), di luar cakupan yang bisa dikerjakan lewat coding pass. Arsitektur interaksi (state machine, idle animation, scroll show/hide, klik membuka sidebar) sudah mengikuti PRD §26/§28/§29/§43 secara penuh, sehingga tinggal mengganti aset SVG dengan render 3D nantinya tanpa mengubah logic.
