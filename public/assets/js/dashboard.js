@@ -27,6 +27,36 @@
 
     let currentSelection = null;
 
+    // Deep-link support (Tahap C1): the selected period/snapshot and every
+    // tree filter are mirrored into the URL query string via
+    // history.replaceState (never pushState — filtering isn't a navigation
+    // the back button should undo). This means a refresh keeps showing what
+    // the user was looking at instead of silently resetting to the latest
+    // period, and a link to this URL can be shared to point a colleague at
+    // the exact same view. Reading is a plain URLSearchParams parse of
+    // window.location.search; nothing here talks to the server.
+    function readUrlState() {
+        const params = new URLSearchParams(window.location.search);
+        return {
+            selection: params.get('selection') || '',
+            search: params.get('q') || '',
+            job_level_group: params.get('level') || '',
+            position_grade: params.get('grade') || '',
+            gap_status: params.get('gap') || '',
+        };
+    }
+
+    function syncUrlState() {
+        const params = new URLSearchParams();
+        if (currentSelection) params.set('selection', currentSelection);
+        if (treeFilters.search) params.set('q', treeFilters.search);
+        if (treeFilters.job_level_group) params.set('level', treeFilters.job_level_group);
+        if (treeFilters.position_grade) params.set('grade', treeFilters.position_grade);
+        if (treeFilters.gap_status) params.set('gap', treeFilters.gap_status);
+        const qs = params.toString();
+        history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+    }
+
     // Cache of the last successful dashboard_api / ftk_tree_api (root level)
     // responses, reused by the Tahap 3 drilldown modals so they never
     // recompute anything — they only slice/format data already fetched for
@@ -61,10 +91,14 @@
             select.appendChild(group);
         }
 
-        currentSelection = opts.default;
+        const urlSelection = readUrlState().selection;
+        const hasUrlSelection = urlSelection && Array.from(select.options).some(o => o.value === urlSelection);
+        currentSelection = hasUrlSelection ? urlSelection : opts.default;
         select.value = currentSelection;
+        syncUrlState();
         select.addEventListener('change', () => {
             currentSelection = select.value;
+            syncUrlState();
             loadDashboard();
             resetTree();
         });
@@ -106,6 +140,7 @@
 
         content.innerHTML = renderDashboard(data);
         populateTreeLevelFilterOptions(treeGroups);
+        restoreTreeFilterInputs();
         syncTreeHeaderStickyOffset();
         initTreeScrollHint();
         bindDashboardDrilldownClicks();
@@ -248,8 +283,9 @@
                     <option value="lebih">Lebih</option>
                 </select>
                 <button class="btn btn-secondary btn-sm" id="btn-apply-tree-filter">Terapkan</button>
+                <button class="btn btn-secondary btn-sm" id="btn-reset-tree-filter">Reset Filter</button>
             </div>
-            <p class="tree-scroll-caption">Geser tabel ke kanan untuk melihat kolom FTK, Realisasi, dan Sisa.</p>
+            <p class="tree-scroll-caption">Geser tabel ke kanan untuk melihat kolom FTK, Realisasi, dan Gap.</p>
             <div class="tree-scroll-wrap">
                 <div class="tree-scroll" id="tree-scroll">
                     <table class="tree-table" id="tree-table">
@@ -266,13 +302,16 @@
 
     // ---------- Tree table ----------
     let treeGroups = [];
-    let treeFilters = { search: '', job_level_group: '', position_grade: '', gap_status: '' };
+    // Seeded from the URL (if present) so a deep-linked/refreshed page
+    // restores the same filters instead of always starting blank.
+    let treeFilters = (({ search, job_level_group, position_grade, gap_status }) =>
+        ({ search, job_level_group, position_grade, gap_status }))(readUrlState());
 
     const GROUP_LABELS = { 'gen 1-3': 'GEN 1-3', MD: 'MD', MM: 'MM', MA: 'MA', spesialist: 'SPECIALIST', 'Senior Specialist': 'SR. SPECIALIST', 'Junior Expert': 'JR. EXPERT', Expert: 'EXPERT', 'Senior Expert': 'SR. EXPERT' };
 
     function renderTreeHeader(groups) {
         treeGroups = groups;
-        const metricCols = ['FTK', 'Organik', 'Tugas Karya', 'Pihak Ketiga', 'Total Real.', 'Sisa'];
+        const metricCols = ['FTK', 'Organik', 'Tugas Karya', 'Pihak Ketiga', 'Total Real.', 'Gap'];
 
         // The name column header is split into two independent single-row
         // sticky cells (one per header row) instead of one rowspan=2 cell.
@@ -511,13 +550,64 @@
         }
     }
 
+    function applyTreeFilters() {
+        treeFilters.search = document.getElementById('tree-search').value.trim();
+        treeFilters.job_level_group = document.getElementById('tree-filter-level').value;
+        treeFilters.position_grade = document.getElementById('tree-filter-grade').value.trim();
+        treeFilters.gap_status = document.getElementById('tree-filter-gap').value;
+        syncUrlState();
+        renderTree();
+    }
+
+    // "Reset Filter": clears every tree filter back to its initial blank
+    // state (same filter object shape as the module-level default), reflects
+    // that in the visible inputs and the URL, then re-fetches the tree —
+    // reuses applyTreeFilters()'s exact fetch/render path, no new filtering
+    // or calculation logic.
+    function resetTreeFilters() {
+        treeFilters.search = '';
+        treeFilters.job_level_group = '';
+        treeFilters.position_grade = '';
+        treeFilters.gap_status = '';
+        restoreTreeFilterInputs();
+        syncUrlState();
+        renderTree();
+    }
+
+    // The tree toolbar's <input>/<select> markup is regenerated blank on
+    // every renderDashboard() call (period/history switch), so without this
+    // the visible filter boxes would go blank on a period switch even though
+    // `treeFilters` (and therefore the actual query) still held the old
+    // values — a real mismatch between what the UI showed and what was
+    // applied. Called after populateTreeLevelFilterOptions() since the level
+    // <select> needs its <option>s in place before its value can be set.
+    function restoreTreeFilterInputs() {
+        const search = document.getElementById('tree-search');
+        const level = document.getElementById('tree-filter-level');
+        const grade = document.getElementById('tree-filter-grade');
+        const gap = document.getElementById('tree-filter-gap');
+        if (search) search.value = treeFilters.search;
+        if (level) level.value = treeFilters.job_level_group;
+        if (grade) grade.value = treeFilters.position_grade;
+        if (gap) gap.value = treeFilters.gap_status;
+    }
+
     document.addEventListener('click', (e) => {
-        if (e.target && e.target.id === 'btn-apply-tree-filter') {
-            treeFilters.search = document.getElementById('tree-search').value.trim();
-            treeFilters.job_level_group = document.getElementById('tree-filter-level').value;
-            treeFilters.position_grade = document.getElementById('tree-filter-grade').value.trim();
-            treeFilters.gap_status = document.getElementById('tree-filter-gap').value;
-            renderTree();
+        if (e.target && e.target.id === 'btn-apply-tree-filter') applyTreeFilters();
+        if (e.target && e.target.id === 'btn-reset-tree-filter') resetTreeFilters();
+    });
+
+    // #tree-search / #tree-filter-grade are recreated on every renderDashboard()
+    // call (period/history change), so this listens on `document` instead of
+    // the inputs themselves — same reason the tree-toggle click handler is
+    // delegated (see Tahap 1 fix above). Enter is the natural way users expect
+    // to submit a search box; without this they had to reach for the mouse
+    // and click "Terapkan" even after typing and pressing Enter out of habit.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        if (e.target && (e.target.id === 'tree-search' || e.target.id === 'tree-filter-grade')) {
+            e.preventDefault();
+            applyTreeFilters();
         }
     });
 
@@ -571,7 +661,7 @@
         }).join('');
         return `
             <table class="history-table" style="margin-top:16px;">
-                <thead><tr><th>Jenjang</th><th style="text-align:right;">FTK</th><th style="text-align:right;">Realisasi</th><th style="text-align:right;">Sisa</th></tr></thead>
+                <thead><tr><th>Jenjang</th><th style="text-align:right;">FTK</th><th style="text-align:right;">Realisasi</th><th style="text-align:right;">Gap</th></tr></thead>
                 <tbody>${rows || '<tr><td colspan="4" style="text-align:center; color:var(--ink-soft);">Tidak ada rincian jenjang.</td></tr>'}</tbody>
             </table>`;
     }
@@ -702,7 +792,7 @@
         });
     }
 
-    const METRIC_LABELS = { ftk: 'FTK', realisasi_organik: 'Organik', realisasi_tugas_karya: 'Tugas Karya', realisasi_pihak_ketiga: 'Pihak Ketiga', total_realisasi: 'Total Realisasi', sisa_delta: 'Sisa' };
+    const METRIC_LABELS = { ftk: 'FTK', realisasi_organik: 'Organik', realisasi_tugas_karya: 'Tugas Karya', realisasi_pihak_ketiga: 'Pihak Ketiga', total_realisasi: 'Total Realisasi', sisa_delta: 'Gap' };
 
     // Tahap 4: clicking a non-zero value cell in the drill-down tree opens a
     // modal scoped to exactly that (row, jenjang-group) combination.
@@ -743,7 +833,7 @@
                     <th>Unit / Organisasi / Jabatan</th>
                     <th style="text-align:right;">FTK</th><th style="text-align:right;">Organik</th>
                     <th style="text-align:right;">Tugas Karya</th><th style="text-align:right;">Pihak Ketiga</th>
-                    <th style="text-align:right;">Total Real.</th><th style="text-align:right;">Sisa</th>
+                    <th style="text-align:right;">Total Real.</th><th style="text-align:right;">Gap</th>
                 </tr></thead>
                 <tbody>${rows.length ? rows.map(c => {
                     const sisa = fmtSisa(c.metrics.total.sisa_delta);

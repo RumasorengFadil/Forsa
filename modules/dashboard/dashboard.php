@@ -44,7 +44,7 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
         </div>
 
         <div id="tab-dashboard" class="tab-panel active">
-            <div id="dashboard-content">
+            <div id="dashboard-content" aria-live="polite">
                 <div class="empty-state"><span class="spin"></span><p>Memuat dashboard…</p></div>
             </div>
         </div>
