@@ -24,6 +24,9 @@ return [
     'ftk_tree_api.php' => '/modules/ftk/ftk_tree_api.php',
     'ftk_search_api.php' => '/modules/ftk/ftk_search_api.php',
 
+    'ai_chat_api.php' => '/modules/ai/routes/chat.php',
+    'ai_conversations_api.php' => '/modules/ai/routes/conversations.php',
+
     'users' => '/modules/administrasi/users.php',
     'user_create.php' => '/modules/administrasi/user_create.php',
     'user_edit.php' => '/modules/administrasi/user_edit.php',

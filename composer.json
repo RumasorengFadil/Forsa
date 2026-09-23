@@ -16,7 +16,15 @@
             "Forsa\\": "shared/",
             "Forsa\\Import\\": "modules/import/",
             "Forsa\\Ftk\\": "modules/ftk/",
-            "Forsa\\Dashboard\\": "modules/dashboard/"
+            "Forsa\\Dashboard\\": "modules/dashboard/",
+            "Forsa\\Ai\\Providers\\": "modules/ai/providers/",
+            "Forsa\\Ai\\Services\\": "modules/ai/services/",
+            "Forsa\\Ai\\Repositories\\": "modules/ai/repositories/",
+            "Forsa\\Ai\\Tools\\": "modules/ai/tools/",
+            "Forsa\\Ai\\Semantic\\": "modules/ai/semantic/",
+            "Forsa\\Ai\\Query\\": "modules/ai/query/",
+            "Forsa\\Ai\\Security\\": "modules/ai/security/",
+            "Forsa\\Ai\\Cache\\": "modules/ai/cache/"
         }
     }
 }
