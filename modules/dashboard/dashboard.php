@@ -16,8 +16,8 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FTK Workforce Monitoring Dashboard — FORSA</title>
-<link rel="stylesheet" href="assets/css/forsa.css">
+<title>FTK Workforce Monitoring Dashboard - FORSA</title>
+<link rel="stylesheet" href="<?= e(asset_url('assets/css/forsa.css')) ?>">
 </head>
 <body>
 <div class="app-shell">
@@ -88,7 +88,7 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
                             <select name="shap_id" id="up-shap" required>
                                 <option value="">Pilih SH/AP…</option>
                                 <?php foreach ($shapList as $s): ?>
-                                    <option value="<?= (int) $s['id'] ?>"><?= e($s['short_name']) ?> — <?= e($s['code']) ?></option>
+                                    <option value="<?= (int) $s['id'] ?>"><?= e($s['short_name']) ?> - <?= e($s['code']) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -144,6 +144,6 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
 <script>
     const CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;
 </script>
-<script src="assets/js/dashboard.js"></script>
+<script src="<?= e(asset_url('assets/js/dashboard.js')) ?>"></script>
 </body>
 </html>

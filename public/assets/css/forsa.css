@@ -10,10 +10,21 @@
     --ink: #16233d;
     --ink-soft: #56637a;
     --border: #e3e8f0;
+    /* Jenjang-group column separator on the drill-down tree (Tahap 2): a
+       bluish-gray a step darker than --border, derived from --ink-soft
+       rather than a new hue, per the "biru/abu kebiruan yang sedikit lebih
+       gelap dari grid tabel" spec. */
+    --group-sep: rgba(86, 99, 122, .55);
+    --group-sep-shadow: rgba(86, 99, 122, .14);
     --blue: #1c64d1;
-    --green: #1f8a4c;
+    /* --green/--amber darkened from the original #1f8a4c/#c98a1f: those failed
+       WCAG AA contrast as text (as low as 2.73:1 on the amber pill/card
+       backgrounds, 4.38:1 for green on white) — see anti-slop/audit-001-
+       2026-09-23.md, finding #1/#2. These shades hold >=4.5:1 on white and on
+       every cream/pill background that uses them. */
+    --green: #1a7a43;
     --red: #c0392b;
-    --amber: #c98a1f;
+    --amber: #8a6412;
     --radius: 14px;
     --shadow-modal: 0 20px 60px rgba(0, 0, 0, .25);
 }
@@ -167,6 +178,42 @@ a { color: inherit; }
    shorter just because there's little data. Scroll stays internal via
    overflow:auto exactly as before. */
 .tree-scroll { overflow: auto; height: clamp(420px, 70vh, 640px); border: 1px solid var(--border); border-radius: 10px; }
+.tree-scroll-wrap { position: relative; }
+.tree-scroll-caption { display: none; }
+.tree-scroll-hint { display: none; }
+/* Mobile-only scroll affordance: the drill-down table is far wider than a
+   phone screen (9 jenjang groups x 6 metrics), and with no cue a mobile user
+   only sees the name column and assumes that is the whole table. The hint
+   fades out once horizontal scroll reaches the end. See anti-slop/audit-001-
+   2026-09-23.md, finding #3. */
+@media (max-width: 640px) {
+    .tree-scroll-caption {
+        display: block;
+        font-size: 12px;
+        color: var(--ink-soft);
+        margin: 0 0 8px;
+    }
+    .tree-scroll-hint {
+        display: block;
+        position: absolute;
+        top: 1px; right: 1px; bottom: 1px;
+        width: 32px;
+        border-radius: 0 10px 10px 0;
+        background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--card-bg) 65%);
+        pointer-events: none;
+        transition: opacity .15s ease;
+    }
+    .tree-scroll-hint::after {
+        content: "→";
+        position: absolute;
+        top: 50%; right: 6px;
+        transform: translateY(-50%);
+        color: var(--blue);
+        font-weight: 800;
+        font-size: 14px;
+    }
+    .tree-scroll-wrap.at-end .tree-scroll-hint { opacity: 0; }
+}
 /* border-spacing:0 + separate (not collapse) sidesteps assorted Chrome/Safari
    sticky-table-cell rendering bugs; visually identical since we only ever
    set border-bottom (never border-top), so nothing doubles up. */
@@ -193,7 +240,7 @@ a { color: inherit; }
    sit beside) > group-row (6) > metric sub-header (5) > sticky name column
    body cells (2). */
 .tree-table thead th { position: sticky; background: #f7f9fc; z-index: 3; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; font-size: 10.5px; letter-spacing: .3px; }
-.tree-table thead tr.group-row th { top: 0; z-index: 6; background: #eef2f9; text-align: center; border-left: 1px solid #dfe5ef; }
+.tree-table thead tr.group-row th { top: 0; z-index: 6; background: #eef2f9; text-align: center; border-left: 3px solid var(--group-sep); }
 .tree-table thead tr:not(.group-row) th { top: var(--tree-header1-h, 25px); z-index: 5; }
 .tree-table td.col-name, .tree-table th.col-name { position: sticky; left: 0; background: #fff; z-index: 2; text-align: left; min-width: 340px; max-width: 440px; white-space: normal; }
 /* "tr" is repeated (vs. just "thead th.col-name") purely to match/exceed the
@@ -203,7 +250,45 @@ a { color: inherit; }
    header-swap-on-horizontal-scroll bug (col-name was computing to
    group-row's z-index:6 and #eef2f9 background instead of its own). */
 .tree-table thead tr th.col-name { background: #f7f9fc; z-index: 8; border-left: none; }
+
+/* Jenjang-group column separators on the drill-down tree (TOTAL | MA | MM |
+   MD | SR. SPECIALIST | SPECIALIST | GEN 1-3 | SR. EXPERT | EXPERT | JR.
+   EXPERT). Each group is exactly 6 metric columns (FTK/Organik/Tugas
+   Karya/Pihak Ketiga/Total Real./Sisa) after the name column, so the FIRST
+   column of every group is :nth-child(6n+2) (FTK), for n = 0..9. This holds
+   identically for the metric sub-header row and EVERY body <tr> (root or
+   nested child alike — indentation depth is irrelevant to a plain "tbody
+   td" selector, and the column index never shifts regardless of rowspan
+   anywhere else in the table, since this rule only ever targets plain
+   single-row/single-column cells), so the boundary runs straight and
+   uninterrupted from the header down through every row to the actual
+   values, at any scroll position, expanded or collapsed.
+   ONE border only (border-left on the incoming group's first column) — a
+   previous version also added border-right on the outgoing group's last
+   column ("Sisa"), giving a double line at every seam. That looked
+   inconsistent/broken rather than one solid boundary (the inset shadow only
+   sat on one of the two adjacent lines), so it was reverted: every seam now
+   has exactly one line, defined from exactly one side. Internal subcolumns
+   within a group keep the plain 1px grid already used for every other
+   row/column line in the table. `!important` on the thick border guards
+   against a future per-cell rule (e.g. a hover or status class) accidentally
+   erasing the group boundary — the group structure must always win. */
+.tree-table thead tr:not(.group-row) th:not(.col-name),
+.tree-table tbody td:not(.col-name) {
+    border-left: 1px solid var(--border);
+}
+.tree-table thead tr:not(.group-row) th:nth-child(6n+2),
+.tree-table tbody td:nth-child(6n+2) {
+    border-left: 3px solid var(--group-sep) !important;
+    box-shadow: inset 2px 0 0 var(--group-sep-shadow);
+}
 .tree-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* Tahap 4: clickable value cells reset to look like plain table text by
+   default (color:inherit picks up .sisa-pos/.sisa-neg from the parent td),
+   only revealing the "this is clickable" affordance on hover/focus so the
+   table doesn't look busier than before for the common case. */
+.tree-val-btn { all: unset; cursor: pointer; color: inherit; font: inherit; font-variant-numeric: tabular-nums; border-radius: 4px; padding: 1px 4px; margin: -1px -4px; }
+.tree-val-btn:hover, .tree-val-btn:focus-visible { background: #eef2fb; text-decoration: underline; text-underline-offset: 2px; }
 .tree-table tbody tr:nth-child(even) td.col-name { background: #fafbfd; }
 .tree-table tbody tr:hover td { background: #f2f6ff; }
 .tree-table tbody tr:hover td.col-name { background: #f2f6ff; }
@@ -212,9 +297,16 @@ a { color: inherit; }
 .tree-toggle { appearance: none; font: inherit; padding: 0; margin: 0; width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border); background: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 10px; color: var(--ink-soft); flex-shrink: 0; }
 .tree-toggle:hover { background: #eef2fb; border-color: var(--blue); color: var(--blue); }
 .tree-leaf-dot { width: 5px; height: 5px; border-radius: 50%; background: #c7cede; flex-shrink: 0; margin-left: 4px; }
-.sisa-pos { color: var(--red); font-weight: 700; }
+/* Tahap 3 (dashboard): colors match the sign of the DISPLAYED Sisa value
+   (Total Realisasi - FTK, negated from the stored FTK - Total Realisasi in
+   dashboard.js's fmtSisa() — see the comment there), which is also the sign
+   convention the "Gap FTK" KPI card already uses. Positive/green = surplus,
+   negative/red = still short. This only affects how the dashboard *shows*
+   the number; the stored `sisa_delta` column and the upload/import
+   validation formula (documented in the PRD) are untouched. */
+.sisa-pos { color: var(--green); font-weight: 700; }
 .sisa-zero { color: var(--ink-soft); }
-.sisa-neg { color: var(--green); font-weight: 700; }
+.sisa-neg { color: var(--red); font-weight: 700; }
 
 /* One-off highlight when "Lihat di Drill-down Tree" (Tahap 3) scrolls to and
    expands a SH/AP row — plays once, never loops (no perpetual motion). */

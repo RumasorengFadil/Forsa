@@ -49,9 +49,10 @@ Default login after `seed_admin.php`: `admin@forsa.local` / whatever password wa
 
 **Business rules are config-driven, not hardcoded**: `config/ftk_rules.php` holds the job-level mapping table (`JobLevelMapper`) and the pemenuhan-status thresholds (`>=100` / `90–99.9` / `<90`). When changing thresholds or level groupings, edit this config — several places (`DashboardService`, `TreeService`, the JS KPI coloring) key off the same buckets and should stay in sync conceptually even though the JS duplicates the thresholds for immediate rendering.
 
-**Two sign conventions for the same idea, both intentional** — don't "fix" one to match the other:
-- Tree table `Sisa/Delta` = `FTK − Total Realisasi` (positive = still short).
-- Dashboard KPI `Gap FTK` = `Total Realisasi − FTK` (negative = still short), matching the mockup's displayed sign.
+**Sisa/Delta has one stored/backend convention and one dashboard-display convention — don't conflate them:**
+- **Stored** (`forsa_ftk_snapshot_rows.sisa_delta`, computed by `FtkParser`, aggregated by `TreeService`'s SQL, and shown as-is in the upload preview modal): `FTK − Total Realisasi` (positive = still short). This is the PRD/import-validation formula — never change it without a data migration for already-imported snapshots.
+- **Dashboard display** (`fmtSisa()` in `dashboard.js`, used by every Sisa cell in the drill-down tree and its two detail modals): negates the stored value, i.e. shows `Total Realisasi − FTK` (positive/green = surplus, negative/red = still short). This was an explicit user-requested change so the tree's Sisa column agrees in sign and color with the "Gap FTK" KPI card, which already used `Total Realisasi − FTK`. The negation happens in exactly one place (`fmtSisa()`); don't re-derive Sisa's sign anywhere else in the frontend.
+- The **gap-status filter** (`kurang`/`terpenuhi`/`lebih` in `TreeService`) still reads the *stored* value directly (`sisa_delta > 0` = kurang) — that's correct and unaffected, since "kurang" (shortage) is a stable business meaning independent of which sign convention is displayed.
 
 **Single-page dashboard**: `modules/dashboard/dashboard.php` + `public/assets/js/dashboard.js` intentionally combine the Dashboard view, the Upload modal (3-step: form → preview/validate → confirm, via `upload_submit.php?action=preview|confirm`), and the Histori Upload tab into one page with client-side tabs — this was an explicit product decision, not the PRD's original separate-pages nav (`docs/architecture/overview.md` records why). Don't split these back into separate pages without checking with the user first.
 
@@ -59,11 +60,13 @@ Default login after `seed_admin.php`: `admin@forsa.local` / whatever password wa
 
 **File storage**: confirmed uploads are copied permanently into `storage/uploads/` (never auto-deleted, filenames randomized); `storage/temp/` only holds files mid-preview, referenced by a token stored in `$_SESSION['_upload_tokens']` until confirm or expiry.
 
+**Static asset cache-busting**: Apache/MAMP sends no cache-control headers for `public/assets/*`, so browsers can cache `forsa.css`/`dashboard.js`/`users.js` indefinitely on their own heuristics — confirmed to cause real, repeated confusion during manual testing (edits not taking effect even after a hard refresh). Every `<link>`/`<script>` tag for those three files goes through `asset_url()` (`shared/response.php`), which appends `?v=<filemtime>` so a changed file is always fetched fresh. When adding a new CSS/JS file referenced from a page, wrap its path in `asset_url()` too rather than hardcoding the bare path.
+
 ## UI conventions (see `docs/reports/2026/09/21/` for the audit that established these)
 
 - Palette is intentionally narrow: one primary (`--blue`), neutral ink/border grays, and a 3-color status system (`--green`/`--amber`/`--red`) that must only ever encode a real pemenuhan/gap state — never used decoratively. Don't reach for new arbitrary accent colors.
 - Cards are flat (border only, no shadow) by default; shadow is reserved for the login card and modals only.
-- Interactive tree nodes (`.tree-toggle`) must stay real `<button>` elements with `aria-expanded`, not clickable `<span>`s — this was a deliberate accessibility fix. The tree's expand/collapse handler is a single delegated listener on `#tree-tbody` (bound once); don't reintroduce per-node `addEventListener` calls on expand, since that previously caused duplicate handlers stacking up across repeated expand/collapse cycles.
+- Interactive tree nodes (`.tree-toggle`) must stay real `<button>` elements with `aria-expanded`, not clickable `<span>`s — this was a deliberate accessibility fix. The tree's expand/collapse handler is a single delegated listener bound once on `document` (`treeHandlersBound` guard) — **not** on `#tree-tbody` itself. It was originally on `#tree-tbody`, which broke expand/collapse the moment the dashboard re-rendered (period/history change replaces `#dashboard-content`'s innerHTML, so `#tree-tbody` is a new element every time, but the guard prevented ever re-attaching to it). Don't move the delegation back onto `#tree-tbody`, and don't reintroduce per-node `addEventListener` calls on expand either, since that previously caused duplicate handlers stacking up across repeated expand/collapse cycles.
 
 # Product source of truth
 

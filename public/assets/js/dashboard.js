@@ -2,6 +2,29 @@
     const fmt = (n) => (n ?? 0).toLocaleString('id-ID');
     const fmtPct = (n) => (n ?? 0).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
 
+    // DISPLAY formula for the dashboard's "Sisa" column: Total Realisasi -
+    // FTK (positive = surplus/realisasi exceeds FTK, negative = still short
+    // of FTK, zero = exactly met). This is the mirror image of the stored
+    // `sisa_delta` value the API returns (backend/PRD convention: FTK -
+    // Total Realisasi, used for import validation and the upload preview —
+    // deliberately left untouched there), so it's negated once, right here,
+    // rather than anywhere the raw value is read. Negating is safe for
+    // SUM-aggregated values too (TOTAL/group rows), since -(sum(x)) ==
+    // sum(-x). This also makes the sign (and therefore the green/red color)
+    // agree with the dashboard KPI "Gap FTK" card, which already uses
+    // Total Realisasi - FTK. Positive shown green with a "+" prefix,
+    // negative shown red, zero stays neutral — used for every rendering of
+    // a Sisa value (tree body cells + the SH/AP and jenjang detail modals)
+    // so the convention never drifts between them.
+    function fmtSisa(storedSisaDelta) {
+        // "+ 0" avoids a literal "-0" (e.g. -(0) is negative zero in JS,
+        // and (-0).toLocaleString() can render as the string "-0").
+        const value = -(storedSisaDelta ?? 0) + 0;
+        const cls = value > 0 ? 'sisa-pos' : (value < 0 ? 'sisa-neg' : 'sisa-zero');
+        const text = (value > 0 ? '+' : '') + fmt(value);
+        return { cls, text };
+    }
+
     let currentSelection = null;
 
     // Cache of the last successful dashboard_api / ftk_tree_api (root level)
@@ -84,6 +107,7 @@
         content.innerHTML = renderDashboard(data);
         populateTreeLevelFilterOptions(treeGroups);
         syncTreeHeaderStickyOffset();
+        initTreeScrollHint();
         bindDashboardDrilldownClicks();
         renderTree(true);
     }
@@ -113,8 +137,8 @@
             </div>`).join('');
 
         const buckets = [
-            { key: 'fulfilled', range: '≥100%', color: '#1f8a4c' },
-            { key: 'monitor', range: '90–99,9%', color: '#c98a1f' },
+            { key: 'fulfilled', range: '≥100%', color: '#1a7a43' },
+            { key: 'monitor', range: '90–99,9%', color: '#8a6412' },
             { key: 'priority', range: '<90%', color: '#c0392b' },
         ];
         const priorityRows = buckets.map(b => {
@@ -225,11 +249,15 @@
                 </select>
                 <button class="btn btn-secondary btn-sm" id="btn-apply-tree-filter">Terapkan</button>
             </div>
-            <div class="tree-scroll">
-                <table class="tree-table" id="tree-table">
-                    ${renderTreeHeader(data.job_level_order)}
-                    <tbody id="tree-tbody"></tbody>
-                </table>
+            <p class="tree-scroll-caption">Geser tabel ke kanan untuk melihat kolom FTK, Realisasi, dan Sisa.</p>
+            <div class="tree-scroll-wrap">
+                <div class="tree-scroll" id="tree-scroll">
+                    <table class="tree-table" id="tree-table">
+                        ${renderTreeHeader(data.job_level_order)}
+                        <tbody id="tree-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="tree-scroll-hint" aria-hidden="true"></div>
             </div>
             <p class="coverage-note">Gap jenjang dihitung dari data FTK masked.</p>
         </div>
@@ -294,21 +322,50 @@
         table.style.setProperty('--tree-header1-h', groupRow.getBoundingClientRect().height + 'px');
     }
 
+    // Mobile scroll-affordance for the drill-down table (anti-slop audit-001
+    // finding #3): fades the right-edge hint out once the user has actually
+    // scrolled to the end, so it only shows while there is still hidden
+    // content to reveal. Re-bound on every renderDashboard() call since
+    // #tree-scroll is a new element each time (same reason attachTreeHandlers
+    // delegates to `document` instead of binding to recreated elements).
+    function initTreeScrollHint() {
+        const wrap = document.querySelector('.tree-scroll-wrap');
+        const scroller = document.getElementById('tree-scroll');
+        if (!wrap || !scroller) return;
+        const update = () => {
+            const atEnd = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 4;
+            wrap.classList.toggle('at-end', atEnd);
+        };
+        scroller.addEventListener('scroll', update);
+        update();
+    }
+
     let stickyResizeTimer = null;
     window.addEventListener('resize', () => {
         clearTimeout(stickyResizeTimer);
         stickyResizeTimer = setTimeout(syncTreeHeaderStickyOffset, 150);
     });
 
-    function metricCells(metrics) {
+    // Tahap 4: a value cell is clickable when it's non-zero AND there's
+    // somewhere real to drill into — either the TOTAL column (always has a
+    // per-jenjang breakdown, computed from data already loaded for this row,
+    // no fetch needed) or a specific jenjang group on a row that has
+    // children (the breakdown is "this row's children, filtered to that
+    // group" — the exact same query TreeService already runs for normal
+    // expand/filter, just called on demand for the modal). A leaf jabatan
+    // row has nothing further under a single jenjang group, so those cells
+    // stay plain text there.
+    function metricCells(metrics, rowKey, group, canDrill) {
         const cols = ['ftk', 'realisasi_organik', 'realisasi_tugas_karya', 'realisasi_pihak_ketiga', 'total_realisasi', 'sisa_delta'];
         return cols.map(c => {
-            if (c === 'sisa_delta') {
-                const v = metrics[c];
-                const cls = v > 0 ? 'sisa-pos' : (v < 0 ? 'sisa-neg' : 'sisa-zero');
-                return `<td class="num ${cls}">${fmt(v)}</td>`;
+            const isSisa = c === 'sisa_delta';
+            const { cls, text } = isSisa ? fmtSisa(metrics[c]) : { cls: '', text: fmt(metrics[c]) };
+            const rawValue = isSisa ? -(metrics[c] ?? 0) : (metrics[c] ?? 0);
+            const clickable = canDrill && rawValue !== 0;
+            if (!clickable) {
+                return `<td class="num ${cls}">${text}</td>`;
             }
-            return `<td class="num">${fmt(metrics[c])}</td>`;
+            return `<td class="num ${cls}"><button type="button" class="tree-val-btn" data-row-key="${escapeAttr(rowKey)}" data-group="${escapeAttr(group)}" data-metric="${c}" aria-label="Lihat rincian ${c} (${group})">${text}</button></td>`;
         }).join('');
     }
 
@@ -316,7 +373,8 @@
         const m = node.metrics.total;
         const groupCells = ['total', ...treeGroups].map(g => {
             const gm = g === 'total' ? m : (node.metrics.groups[g] || { ftk: 0, realisasi_organik: 0, realisasi_tugas_karya: 0, realisasi_pihak_ketiga: 0, total_realisasi: 0, sisa_delta: 0 });
-            return metricCells(gm);
+            const canDrill = g === 'total' || node.has_children;
+            return metricCells(gm, node.key, g, canDrill);
         }).join('');
 
         const toggle = node.has_children
@@ -337,15 +395,32 @@
         return String(s).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
     }
 
-    async function fetchNodes(shapCode, path) {
-        const params = new URLSearchParams({
-            selection: currentSelection || '',
-            path_json: JSON.stringify(path || []),
+    // Every rendered row's full node object (path, snapshot_id, has_children,
+    // metrics.total/groups), keyed by node.key — populated as rows are
+    // rendered (root load + every expand), so the Tahap 4 value-drilldown
+    // modal can look up a row's own data (for the TOTAL column's per-jenjang
+    // breakdown) without an extra fetch, and resolve shap/path for a
+    // per-jenjang-group breakdown fetch without re-deriving them.
+    const nodeCache = new Map();
+    // Caller sets each node's n.__shap first (roots derive it from their own
+    // key; deeper nodes inherit their parent row's resolved shap) — this
+    // function only indexes what's already there, it never assigns __shap
+    // itself, so it can't stomp a value the caller just set.
+    function cacheNodes(nodes) {
+        nodes.forEach(n => nodeCache.set(n.key, n));
+    }
+
+    async function fetchNodes(shapCode, path, filterOverrides) {
+        const filters = Object.assign({
             search: treeFilters.search,
             job_level_group: treeFilters.job_level_group,
             position_grade: treeFilters.position_grade,
             gap_status: treeFilters.gap_status,
-        });
+        }, filterOverrides || {});
+        const params = new URLSearchParams(Object.assign({
+            selection: currentSelection || '',
+            path_json: JSON.stringify(path || []),
+        }, filters));
         if (shapCode) params.set('shap', shapCode);
         const res = await fetch('ftk_tree_api.php?' + params.toString());
         const json = await res.json();
@@ -358,6 +433,8 @@
         tbody.innerHTML = '<tr><td colspan="99" style="text-align:center; padding:16px;"><span class="spin"></span></td></tr>';
         const nodes = await fetchNodes(null, []);
         rootTreeNodes = nodes;
+        nodes.forEach(n => { n.__shap = n.key.replace('shap:', ''); });
+        cacheNodes(nodes);
         tbody.innerHTML = nodes.map(n => renderNodeRow(n, 0)).join('') || '<tr><td colspan="99" style="text-align:center; padding:16px; color:var(--ink-soft);">Tidak ada data.</td></tr>';
         attachTreeHandlers();
     }
@@ -367,15 +444,27 @@
         if (tbody) tbody.innerHTML = '';
     }
 
-    // Single delegated listener bound once on the tbody (instead of re-binding a
-    // listener on every .tree-toggle each time a branch expands), so repeated
-    // expand/collapse never stacks duplicate handlers on old rows.
+    // Single delegated listener bound once on `document` — NOT on #tree-tbody
+    // itself. #tree-tbody is recreated from scratch every time the dashboard
+    // re-renders (period/history change re-assigns #dashboard-content's
+    // innerHTML), so a listener attached to "the current tbody element" goes
+    // with it to the garbage collector; treeHandlersBound would then block
+    // ever re-attaching to the new one, silently breaking expand/collapse
+    // after the first period change. `document` never gets replaced, so
+    // delegating there survives any number of re-renders. `.tree-toggle` is
+    // only ever used for tree expand buttons, so no extra scoping is needed.
     let treeHandlersBound = false;
     function attachTreeHandlers() {
         if (treeHandlersBound) return;
         treeHandlersBound = true;
 
-        document.getElementById('tree-tbody').addEventListener('click', async (e) => {
+        document.addEventListener('click', async (e) => {
+            const valueBtn = e.target.closest('.tree-val-btn');
+            if (valueBtn) {
+                openTreeValueDetail(valueBtn.dataset.rowKey, valueBtn.dataset.group, valueBtn.dataset.metric);
+                return;
+            }
+
             const toggle = e.target.closest('.tree-toggle');
             if (!toggle) return;
 
@@ -388,6 +477,8 @@
                 toggle.textContent = '…';
                 const resolvedShap = row.dataset.shapCode || nodeData.shap;
                 const children = await fetchNodes(resolvedShap, nodeData.path);
+                children.forEach(c => { c.__shap = resolvedShap; });
+                cacheNodes(children);
                 toggle.disabled = false;
                 toggle.textContent = '−';
                 toggle.setAttribute('aria-expanded', 'true');
@@ -467,6 +558,24 @@
         `).join('')}</div>`;
     }
 
+    // Per-jenjang breakdown for a single node — reused by openShapDetail()
+    // (Tahap 3) and openTreeValueDetail()'s TOTAL-column case (Tahap 4).
+    // Reads straight from node.metrics.groups, already loaded for any
+    // rendered row — no fetch, no new calculation.
+    function renderJenjangBreakdownTable(node) {
+        const rows = treeGroups.map(g => {
+            const gm = node.metrics.groups[g] || { ftk: 0, total_realisasi: 0, sisa_delta: 0 };
+            if (gm.ftk === 0 && gm.total_realisasi === 0) return '';
+            const sisa = fmtSisa(gm.sisa_delta);
+            return `<tr><td>${jenjangLabel(g)}</td><td style="text-align:right;">${fmt(gm.ftk)}</td><td style="text-align:right;">${fmt(gm.total_realisasi)}</td><td style="text-align:right;" class="${sisa.cls}">${sisa.text}</td></tr>`;
+        }).join('');
+        return `
+            <table class="history-table" style="margin-top:16px;">
+                <thead><tr><th>Jenjang</th><th style="text-align:right;">FTK</th><th style="text-align:right;">Realisasi</th><th style="text-align:right;">Sisa</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="4" style="text-align:center; color:var(--ink-soft);">Tidak ada rincian jenjang.</td></tr>'}</tbody>
+            </table>`;
+    }
+
     function findTreeRowByKey(key) {
         return Array.from(document.querySelectorAll('#tree-tbody tr')).find(r => r.dataset.key === key);
     }
@@ -494,6 +603,23 @@
         document.getElementById('tree-table').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // Generic version of scrollToTreeAndExpandShap() (Tahap 3, SH/AP-root
+    // only) that works for any row currently rendered in the tree — used by
+    // the Tahap 4 value-drilldown modal's "Lihat di Drill-down Tree" button.
+    function expandAndScrollToRow(rowKey) {
+        const treeTable = document.getElementById('tree-table');
+        const row = findTreeRowByKey(rowKey);
+        if (!treeTable || !row) return;
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const toggle = row.querySelector('.tree-toggle');
+        if (toggle && toggle.getAttribute('aria-expanded') === 'false') {
+            toggle.click();
+        }
+        row.classList.remove('row-flash');
+        void row.offsetWidth;
+        row.classList.add('row-flash');
+    }
+
     function openShapDetail(shapCode) {
         if (!lastDashboardData) return;
         const shap = lastDashboardData.per_shap.find(s => s.shap_code === shapCode);
@@ -518,24 +644,12 @@
                         <tr><td>Tugas Karya</td><td style="text-align:right;">${fmt(m.realisasi_tugas_karya)}</td></tr>
                         <tr><td>Pihak Ketiga</td><td style="text-align:right;">${fmt(m.realisasi_pihak_ketiga)}</td></tr>
                         <tr><td><b>Total Realisasi</b></td><td style="text-align:right;"><b>${fmt(m.total_realisasi)}</b></td></tr>
-                        <tr><td>Sisa / Delta</td><td style="text-align:right;">${fmt(m.sisa_delta)}</td></tr>
+                        <tr><td>Sisa / Delta</td><td style="text-align:right;" class="${fmtSisa(m.sisa_delta).cls}">${fmtSisa(m.sisa_delta).text}</td></tr>
                     </tbody>
                 </table>`;
         }
 
-        let jenjangHtml = '';
-        if (node) {
-            const rows = treeGroups.map(g => {
-                const gm = node.metrics.groups[g] || { ftk: 0, total_realisasi: 0, sisa_delta: 0 };
-                if (gm.ftk === 0 && gm.total_realisasi === 0) return '';
-                return `<tr><td>${jenjangLabel(g)}</td><td style="text-align:right;">${fmt(gm.ftk)}</td><td style="text-align:right;">${fmt(gm.total_realisasi)}</td><td style="text-align:right;">${fmt(gm.sisa_delta)}</td></tr>`;
-            }).join('');
-            jenjangHtml = `
-                <table class="history-table" style="margin-top:16px;">
-                    <thead><tr><th>Jenjang</th><th style="text-align:right;">FTK</th><th style="text-align:right;">Realisasi</th><th style="text-align:right;">Sisa</th></tr></thead>
-                    <tbody>${rows || '<tr><td colspan="4" style="text-align:center; color:var(--ink-soft);">Tidak ada rincian jenjang.</td></tr>'}</tbody>
-                </table>`;
-        }
+        const jenjangHtml = node ? renderJenjangBreakdownTable(node) : '';
 
         const footer = `
             <button class="btn btn-secondary" data-close>Tutup</button>
@@ -573,7 +687,7 @@
         const tableHtml = `
             <table class="history-table" style="margin-top:16px;">
                 <thead><tr><th>SH/AP</th><th style="text-align:right;">FTK</th><th style="text-align:right;">Realisasi</th><th style="text-align:right;">Sisa</th></tr></thead>
-                <tbody>${rows.length ? rows.map(r => `<tr><td>${r.label}</td><td style="text-align:right;">${fmt(r.ftk)}</td><td style="text-align:right;">${fmt(r.total_realisasi)}</td><td style="text-align:right;">${fmt(r.sisa_delta)}</td></tr>`).join('') : '<tr><td colspan="4" style="text-align:center; color:var(--ink-soft);">Tidak ada SH/AP dengan jenjang ini.</td></tr>'}</tbody>
+                <tbody>${rows.length ? rows.map(r => { const sisa = fmtSisa(r.sisa_delta); return `<tr><td>${r.label}</td><td style="text-align:right;">${fmt(r.ftk)}</td><td style="text-align:right;">${fmt(r.total_realisasi)}</td><td style="text-align:right;" class="${sisa.cls}">${sisa.text}</td></tr>`; }).join('') : '<tr><td colspan="4" style="text-align:center; color:var(--ink-soft);">Tidak ada SH/AP dengan jenjang ini.</td></tr>'}</tbody>
             </table>`;
 
         const footer = `
@@ -586,6 +700,76 @@
             closeDetailModal();
             applyJenjangFilterAndScroll(group);
         });
+    }
+
+    const METRIC_LABELS = { ftk: 'FTK', realisasi_organik: 'Organik', realisasi_tugas_karya: 'Tugas Karya', realisasi_pihak_ketiga: 'Pihak Ketiga', total_realisasi: 'Total Realisasi', sisa_delta: 'Sisa' };
+
+    // Tahap 4: clicking a non-zero value cell in the drill-down tree opens a
+    // modal scoped to exactly that (row, jenjang-group) combination.
+    //   - TOTAL column: breakdown by jenjang for this row, from data already
+    //     loaded (renderJenjangBreakdownTable) — no fetch.
+    //   - A specific jenjang group: this row's children, filtered to that
+    //     group — the exact same ftk_tree_api.php call a normal expand makes,
+    //     just with job_level_group forced to the clicked group instead of
+    //     whatever the toolbar filter currently is. No new query, no new
+    //     calculation — same source/filter the rest of the tree already uses.
+    async function openTreeValueDetail(rowKey, group, metric) {
+        const node = nodeCache.get(rowKey);
+        if (!node) return;
+
+        const groupLabel = group === 'total' ? 'TOTAL' : (GROUP_LABELS[group] || group);
+        const title = `${node.label} — ${groupLabel}`;
+        const subtitle = `<p style="font-size:12.5px; color:var(--ink-soft); margin:-8px 0 12px;">Rincian dipicu dari kolom <b>${METRIC_LABELS[metric] || metric}</b>.</p>`;
+
+        if (group === 'total') {
+            const stats = detailStatRow([
+                { value: fmt(node.metrics.total.ftk), label: 'FTK' },
+                { value: fmt(node.metrics.total.total_realisasi), label: 'Realisasi' },
+            ]);
+            openDetailModal(title, subtitle + stats + renderJenjangBreakdownTable(node), '<button class="btn btn-secondary" data-close>Tutup</button>');
+            return;
+        }
+
+        if (!node.has_children) return; // leaf jabatan: nothing further under one jenjang group
+
+        openDetailModal(title, subtitle + '<div class="empty-state"><span class="spin"></span></div>', '<button class="btn btn-secondary" data-close>Tutup</button>');
+
+        const children = await fetchNodes(node.__shap, node.path, { job_level_group: group });
+        const rows = children.filter(c => c.metrics.total.ftk !== 0 || c.metrics.total.total_realisasi !== 0);
+
+        const tableHtml = `
+            <table class="history-table">
+                <thead><tr>
+                    <th>Unit / Organisasi / Jabatan</th>
+                    <th style="text-align:right;">FTK</th><th style="text-align:right;">Organik</th>
+                    <th style="text-align:right;">Tugas Karya</th><th style="text-align:right;">Pihak Ketiga</th>
+                    <th style="text-align:right;">Total Real.</th><th style="text-align:right;">Sisa</th>
+                </tr></thead>
+                <tbody>${rows.length ? rows.map(c => {
+                    const sisa = fmtSisa(c.metrics.total.sisa_delta);
+                    const label = c.label + (c.position_grade ? ` — PoG ${c.position_grade}` : '');
+                    return `<tr><td>${label}</td>
+                        <td style="text-align:right;">${fmt(c.metrics.total.ftk)}</td>
+                        <td style="text-align:right;">${fmt(c.metrics.total.realisasi_organik)}</td>
+                        <td style="text-align:right;">${fmt(c.metrics.total.realisasi_tugas_karya)}</td>
+                        <td style="text-align:right;">${fmt(c.metrics.total.realisasi_pihak_ketiga)}</td>
+                        <td style="text-align:right;">${fmt(c.metrics.total.total_realisasi)}</td>
+                        <td style="text-align:right;" class="${sisa.cls}">${sisa.text}</td></tr>`;
+                }).join('') : `<tr><td colspan="7" style="text-align:center; color:var(--ink-soft);">Tidak ada rincian untuk jenjang ${groupLabel} di sini.</td></tr>`}</tbody>
+            </table>`;
+
+        const footer = `
+            <button class="btn btn-secondary" data-close>Tutup</button>
+            <button class="btn btn-primary" id="btn-goto-row">Lihat di Drill-down Tree</button>`;
+        openDetailModal(title, subtitle + tableHtml, footer);
+
+        const gotoBtn = document.getElementById('btn-goto-row');
+        if (gotoBtn) {
+            gotoBtn.addEventListener('click', () => {
+                closeDetailModal();
+                expandAndScrollToRow(rowKey);
+            });
+        }
     }
 
     // Delegated + bound once on the stable #dashboard-content container, so

@@ -19,7 +19,7 @@ $logoUrl = forsa_brand_logo_url();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login — FORSA PLN</title>
-    <link rel="stylesheet" href="assets/css/forsa.css">
+    <link rel="stylesheet" href="<?= e(asset_url('assets/css/forsa.css')) ?>">
 </head>
 
 <body class="login-body">
