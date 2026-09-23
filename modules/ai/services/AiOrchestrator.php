@@ -44,6 +44,7 @@ final class AiOrchestrator
     public function __construct(
         private readonly AiProviderInterface $provider,
         private readonly AiConversationService $conversations,
+        private readonly string $modelName = '',
         private readonly ToolRegistry $tools = new ToolRegistry(),
         private readonly QueryForsaTool $queryForsaTool = new QueryForsaTool(),
         private readonly AiToolExecutionRepository $toolExecutions = new AiToolExecutionRepository(),
@@ -54,8 +55,12 @@ final class AiOrchestrator
         }
     }
 
-    public function reply(array $conversation, string $userMessage, array $user): string
+    /**
+     * @return array{reply: string, execution_time_ms: int, model: string, source: ?string}
+     */
+    public function reply(array $conversation, string $userMessage, array $user): array
     {
+        $start = microtime(true);
         $conversationId = (int) $conversation['id'];
         $this->conversations->recordUserMessage($conversation, $userMessage);
 
@@ -66,6 +71,11 @@ final class AiOrchestrator
         }
 
         $response = $this->provider->chat($messages, $this->tools->all());
+
+        // Metadata Jawaban (Tahap 4): every tool call that actually ran
+        // during this reply, so the API can tell the user what the answer
+        // is based on ("Sumber jawaban") without ever showing raw SQL.
+        $toolsUsed = [];
 
         if ($response->hasToolCalls()) {
             $messages[] = [
@@ -82,11 +92,15 @@ final class AiOrchestrator
             ];
 
             foreach ($response->toolCalls as $call) {
+                [$toolResultJson, $usedMeta] = $this->runTool($conversationId, $call, $user);
                 $messages[] = [
                     'role' => 'tool',
                     'tool_call_id' => $call['id'],
-                    'content' => $this->runTool($conversationId, $call, $user),
+                    'content' => $toolResultJson,
                 ];
+                if ($usedMeta !== null) {
+                    $toolsUsed[] = $usedMeta;
+                }
             }
 
             // Second round-trip: model now has the structured tool result
@@ -97,10 +111,16 @@ final class AiOrchestrator
         $reply = $response->content ?? 'Maaf, saya belum bisa memberikan jawaban untuk pertanyaan itu.';
         $this->conversations->recordAssistantMessage($conversationId, $reply);
 
-        return $reply;
+        return [
+            'reply' => $reply,
+            'execution_time_ms' => (int) ((microtime(true) - $start) * 1000),
+            'model' => $this->modelName,
+            'source' => $this->buildSourceLabel($toolsUsed),
+        ];
     }
 
-    private function runTool(int $conversationId, array $call, array $user): string
+    /** @return array{0: string, 1: ?array{tool: string, resolved_period: ?string}} */
+    private function runTool(int $conversationId, array $call, array $user): array
     {
         $start = microtime(true);
         $args = json_decode($call['arguments'], true) ?? [];
@@ -109,7 +129,7 @@ final class AiOrchestrator
 
         if ($call['name'] !== QueryForsaTool::NAME) {
             $this->toolExecutions->log($conversationId, $userId, $call['name'], $args, null, null, 0, 'unknown_tool');
-            return json_encode(['error' => 'Tool tidak dikenal.'], JSON_UNESCAPED_UNICODE);
+            return [json_encode(['error' => 'Tool tidak dikenal.'], JSON_UNESCAPED_UNICODE), null];
         }
 
         try {
@@ -126,16 +146,41 @@ final class AiOrchestrator
                 'success'
             );
 
-            return json_encode([
+            $json = json_encode([
                 'resolved_period' => $result['resolved_period'],
                 'previous_period' => $result['previous_period'],
                 'rows' => $result['rows'],
                 'previous_rows' => $result['previous_rows'],
             ], JSON_UNESCAPED_UNICODE);
+
+            return [$json, ['tool' => QueryForsaTool::NAME, 'resolved_period' => $result['resolved_period']]];
         } catch (SemanticException $e) {
             $elapsed = (int) ((microtime(true) - $start) * 1000);
             $this->toolExecutions->log($conversationId, $userId, QueryForsaTool::NAME, $args, null, null, $elapsed, 'error:' . $e->errorCode);
-            return json_encode(['error' => $e->getMessage(), 'error_code' => $e->errorCode], JSON_UNESCAPED_UNICODE);
+            return [json_encode(['error' => $e->getMessage(), 'error_code' => $e->errorCode], JSON_UNESCAPED_UNICODE), null];
         }
+    }
+
+    /**
+     * PRD's own principle (§4.1: database is the source of truth) made
+     * visible to the user as a short, honest label — never the SQL itself
+     * (§31 "Jangan tampilkan SQL"), just what kind of source backed the
+     * answer.
+     *
+     * @param array<int, array{tool: string, resolved_period: ?string}> $toolsUsed
+     */
+    private function buildSourceLabel(array $toolsUsed): ?string
+    {
+        if ($toolsUsed === []) {
+            return 'Percakapan umum (tidak menggunakan data FORSA)';
+        }
+
+        $periods = array_unique(array_filter(array_map(static fn (array $t) => $t['resolved_period'], $toolsUsed)));
+        $label = 'Data FORSA (snapshot tersimpan)';
+        if ($periods !== []) {
+            $label .= ' — periode ' . implode(', ', $periods);
+        }
+
+        return $label;
     }
 }

@@ -44,8 +44,8 @@ try {
         baseUrl: $aiConfig['base_url'],
         timeoutSeconds: $aiConfig['timeout_seconds'],
     );
-    $orchestrator = new AiOrchestrator($provider, $conversationService);
-    $reply = $orchestrator->reply($conversation, $message, $currentUser);
+    $orchestrator = new AiOrchestrator($provider, $conversationService, $aiConfig['model']);
+    $result = $orchestrator->reply($conversation, $message, $currentUser);
 } catch (AiProviderException $e) {
     error_log('[ai_chat_api] ' . $e->getMessage());
     json_error('FORSA AI Assistant sedang tidak dapat dihubungi. Silakan coba lagi sebentar lagi.', 502);
@@ -53,5 +53,8 @@ try {
 
 json_success([
     'conversation_id' => (int) $conversation['id'],
-    'reply' => $reply,
+    'reply' => $result['reply'],
+    'execution_time_ms' => $result['execution_time_ms'],
+    'model' => $result['model'],
+    'source' => $result['source'],
 ]);
