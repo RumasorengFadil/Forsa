@@ -15,7 +15,13 @@ window.ForsaAi.MascotGreeting = (function () {
         'Coba tanyakan data FTK atau realisasi.',
     ];
 
-    function create(bubbleEl) {
+    // intervalMs: how often the greeting rotates after the fixed first one
+    // (PRD §27 default: 10000ms). Configurable via config/ai.php's
+    // `mascot_greeting_interval_ms` (.env MASCOT_GREETING_INTERVAL_MS),
+    // passed down from ai-assistant.js/mascot-controller.js — this module
+    // itself only owns a hardcoded fallback for when no config is supplied.
+    function create(bubbleEl, intervalMs) {
+        const rotationMs = intervalMs && intervalMs > 0 ? intervalMs : 10000;
         let timer = null;
         let lastText = null;
 
@@ -38,13 +44,14 @@ window.ForsaAi.MascotGreeting = (function () {
             bubbleEl.classList.remove('visible');
         }
 
-        // T=0 fixed greeting, then a different random one every 10s
-        // (section 27) — stopped while the sidebar is open or the mascot is
-        // hidden by scroll, restarted when back to idle.
+        // T=0 fixed greeting, then a different random one every
+        // `rotationMs` (section 27, default 10s) — stopped while the
+        // sidebar is open or the mascot is hidden by scroll, restarted when
+        // back to idle.
         function start() {
             stop();
             show(FIRST_GREETING);
-            timer = setInterval(() => show(pickNext()), 10000);
+            timer = setInterval(() => show(pickNext()), rotationMs);
         }
 
         function stop() {

@@ -12,7 +12,8 @@ window.ForsaAi.MascotController = (function () {
     const SCROLL_TRANSITION_MS = 450;
 
     function create({ mascotEl, greetingEl, onOpenSidebar }) {
-        const greeting = window.ForsaAi.MascotGreeting.create(greetingEl);
+        const greetingIntervalMs = window.ForsaAiConfig?.mascotGreetingIntervalMs;
+        const greeting = window.ForsaAi.MascotGreeting.create(greetingEl, greetingIntervalMs);
         let sidebarOpen = false;
         let scrollState = 'idle'; // idle | hiding | hidden | climbing
 

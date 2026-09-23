@@ -20,4 +20,11 @@ return [
     // different, far more restricted role).
     'db_username' => env('AI_DB_USERNAME', 'forsa_ai_reader'),
     'db_password' => env('AI_DB_PASSWORD', ''),
+
+    // Mascot greeting rotation interval (PRD §27: "setiap 10 detik
+    // berikutnya"). Exposed to the frontend via a small inline script in
+    // dashboard.php (window.ForsaAiConfig) rather than hardcoded in
+    // mascot-animation.js, so it can be tuned per environment without a
+    // code change/deploy.
+    'mascot_greeting_interval_ms' => (int) env('MASCOT_GREETING_INTERVAL_MS', 10000),
 ];

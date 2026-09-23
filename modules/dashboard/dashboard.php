@@ -10,6 +10,7 @@ use Forsa\Database;
 
 $pdo = Database::connection();
 $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WHERE is_active = TRUE ORDER BY sort_order')->fetchAll();
+$aiConfig = require __DIR__ . '/../../config/ai.php';
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -173,6 +174,9 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
         <div class="ai-sidebar-header-actions">
             <button type="button" class="ai-sidebar-btn" id="btn-ai-new-chat">Baru</button>
             <button type="button" class="ai-sidebar-btn" id="btn-ai-history" aria-label="Riwayat percakapan">Riwayat</button>
+            <button type="button" class="ai-sidebar-btn ai-sidebar-icon" id="btn-ai-expand" aria-label="Perbesar lebar sidebar" aria-pressed="false" title="Perbesar/perkecil sidebar">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 2H2v4M10 14h4v-4M2 2l4.5 4.5M14 14L9.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <button type="button" class="ai-sidebar-btn ai-sidebar-close" id="btn-ai-close" aria-label="Tutup FORSA AI Assistant">&times;</button>
         </div>
     </div>
@@ -192,11 +196,15 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
 
 <script>
     const CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;
+    // Config-driven (config/ai.php + .env MASCOT_GREETING_INTERVAL_MS),
+    // not hardcoded in mascot-animation.js.
+    window.ForsaAiConfig = { mascotGreetingIntervalMs: <?= (int) $aiConfig['mascot_greeting_interval_ms'] ?> };
 </script>
 <script src="<?= e(asset_url('assets/js/dashboard.js')) ?>"></script>
 <script src="<?= e(asset_url('assets/js/ai/mascot-animation.js')) ?>"></script>
 <script src="<?= e(asset_url('assets/js/ai/mascot-scroll.js')) ?>"></script>
 <script src="<?= e(asset_url('assets/js/ai/mascot-controller.js')) ?>"></script>
+<script src="<?= e(asset_url('assets/js/ai/ai-markdown.js')) ?>"></script>
 <script src="<?= e(asset_url('assets/js/ai/ai-chat.js')) ?>"></script>
 <script src="<?= e(asset_url('assets/js/ai/ai-assistant.js')) ?>"></script>
 </body>
