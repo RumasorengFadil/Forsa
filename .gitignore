@@ -6,4 +6,6 @@
 !/storage/temp/.gitkeep
 /storage/logs/*
 !/storage/logs/.gitkeep
+/storage/ai/cache/*
+!/storage/ai/cache/.gitkeep
 .DS_Store
