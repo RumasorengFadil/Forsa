@@ -38,22 +38,68 @@ window.ForsaAi.AiChat = (function () {
             });
         }
 
-        function addMessage(role, text) {
+        // Metadata Jawaban (Tahap 4): a compact caption under an assistant
+        // bubble — execution time, model, and a short honest source label
+        // (never raw SQL, see AiOrchestrator::buildSourceLabel()).
+        function addMessageMeta({ executionTimeMs, model, source }) {
             const div = document.createElement('div');
-            div.className = 'ai-msg ' + (role === 'user' ? 'ai-msg-user' : 'ai-msg-assistant');
-            div.textContent = text;
+            div.className = 'ai-msg-meta';
+            const parts = [];
+            if (typeof executionTimeMs === 'number') parts.push(`⏱ ${(executionTimeMs / 1000).toFixed(1)}s`);
+            if (model) parts.push(model);
+            if (source) parts.push(source);
+            div.textContent = parts.join(' · ');
             messagesEl.appendChild(div);
             messagesEl.scrollTop = messagesEl.scrollHeight;
             return div;
         }
 
-        function addThinkingBubble() {
+        function addMessage(role, text) {
             const div = document.createElement('div');
-            div.className = 'ai-msg ai-msg-thinking';
-            div.innerHTML = 'Memahami pertanyaan<span class="dots"><span style="--i:0">.</span><span style="--i:1">.</span><span style="--i:2">.</span></span>';
+            div.className = 'ai-msg ' + (role === 'user' ? 'ai-msg-user' : 'ai-msg-assistant');
+            if (role === 'user') {
+                // The user's own raw input — shown as plain text, never
+                // interpreted as Markdown (nothing to render, and it avoids
+                // ever turning pasted text into unexpected formatting).
+                div.textContent = text;
+            } else {
+                // Assistant replies may contain Markdown (bold, lists, inline
+                // code) — render it properly instead of showing raw "**...**"
+                // to the user. renderMarkdown() escapes HTML before applying
+                // any formatting, so this is safe even if the reply ever
+                // contained literal "<" / ">".
+                div.innerHTML = window.ForsaAi.renderMarkdown(text);
+            }
             messagesEl.appendChild(div);
             messagesEl.scrollTop = messagesEl.scrollHeight;
             return div;
+        }
+
+        // Progress Time (Tahap 5): a live elapsed-time readout while the
+        // model is working ("Menyusun jawaban... 3.2s"), ticking every
+        // 100ms via performance.now() (monotonic, unaffected by system clock
+        // changes) — replaced by the final server-measured execution time
+        // (Tahap 4's .ai-msg-meta) the moment the real response arrives, so
+        // the number the user watches count up and the number shown after
+        // are two readings of the same thing, not two different clocks.
+        function addThinkingBubble() {
+            const div = document.createElement('div');
+            div.className = 'ai-msg ai-msg-thinking';
+            const startedAt = performance.now();
+            const render = () => {
+                const elapsedS = ((performance.now() - startedAt) / 1000).toFixed(1);
+                div.textContent = `Menyusun jawaban... ${elapsedS}s`;
+            };
+            render();
+            const timerId = setInterval(render, 100);
+            messagesEl.appendChild(div);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            return {
+                stop() {
+                    clearInterval(timerId);
+                    div.remove();
+                },
+            };
         }
 
         function addErrorBubble(text) {
@@ -83,7 +129,7 @@ window.ForsaAi.AiChat = (function () {
                     body: JSON.stringify({ conversation_id: currentConversationId, message: text }),
                 });
                 const json = await res.json();
-                thinking.remove();
+                thinking.stop();
 
                 if (!json.success) {
                     setState('error');
@@ -95,9 +141,14 @@ window.ForsaAi.AiChat = (function () {
                 currentConversationId = json.data.conversation_id;
                 setState('responding');
                 addMessage('assistant', json.data.reply);
+                addMessageMeta({
+                    executionTimeMs: json.data.execution_time_ms,
+                    model: json.data.model,
+                    source: json.data.source,
+                });
                 setState('open');
             } catch (err) {
-                thinking.remove();
+                thinking.stop();
                 setState('error');
                 addErrorBubble('Tidak dapat menghubungi FORSA AI Assistant. Periksa koneksi Anda.');
                 setState('open');
@@ -157,6 +208,22 @@ window.ForsaAi.AiChat = (function () {
             historyList.hidden = !historyPanelOpen;
             if (historyPanelOpen) renderHistory();
         });
+
+        // Expand/collapse (header icon): normal = existing sidebar width,
+        // expanded = ~50% of screen width (CSS .ai-sidebar.expanded). Fixed
+        // positioning means this only resizes the overlay itself — the
+        // dashboard behind it never reflows.
+        const EXPAND_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 2H2v4M10 14h4v-4M2 2l4.5 4.5M14 14L9.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        const COLLAPSE_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 6h4V2M14 10h-4v4M6 6L1.5 1.5M10 10l4.5 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        const expandBtn = root.querySelector('#btn-ai-expand');
+        if (expandBtn) {
+            expandBtn.addEventListener('click', () => {
+                const expanded = root.classList.toggle('expanded');
+                expandBtn.setAttribute('aria-pressed', expanded ? 'true' : 'false');
+                expandBtn.setAttribute('aria-label', expanded ? 'Perkecil lebar sidebar' : 'Perbesar lebar sidebar');
+                expandBtn.innerHTML = expanded ? COLLAPSE_ICON : EXPAND_ICON;
+            });
+        }
 
         root.querySelector('#btn-ai-close').addEventListener('click', () => onClose());
 
