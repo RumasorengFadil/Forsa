@@ -18,6 +18,7 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FTK Workforce Monitoring Dashboard - FORSA</title>
 <link rel="stylesheet" href="<?= e(asset_url('assets/css/forsa.css')) ?>">
+<link rel="stylesheet" href="<?= e(asset_url('assets/css/ai-assistant.css')) ?>">
 </head>
 <body>
 <div class="app-shell">
@@ -141,9 +142,62 @@ $shapList = $pdo->query('SELECT id, code, short_name FROM forsa_shap_entities WH
     </div>
 </div>
 
+<!-- FORSA AI Assistant (PRD_FORSA_AI_Assistant.md, Phase 1 — UI Foundation):
+     mascot placeholder + sidebar shell. No AI backend is wired yet — see
+     public/assets/js/ai/ai-chat.js. -->
+<button type="button" class="ai-mascot" id="ai-mascot" aria-label="Buka FORSA AI Assistant" data-state="idle" data-scroll="idle">
+    <div class="ai-mascot-greeting" id="ai-mascot-greeting" aria-live="polite"></div>
+    <svg class="ai-mascot-figure" viewBox="0 0 120 140" aria-hidden="true">
+        <ellipse class="ai-mascot-shadow" cx="60" cy="132" rx="30" ry="6"></ellipse>
+        <g class="ai-mascot-body">
+            <path class="ai-mascot-arm-left" d="M22 60 Q6 70 10 90"></path>
+            <path class="ai-mascot-arm-right" d="M98 60 Q114 70 110 90"></path>
+            <rect class="ai-mascot-torso" x="20" y="18" width="80" height="88" rx="30"></rect>
+            <path class="ai-mascot-antenna-stem" d="M60 18 L60 6"></path>
+            <circle class="ai-mascot-antenna-tip" cx="60" cy="5" r="4"></circle>
+            <circle class="ai-mascot-core" cx="60" cy="76" r="13"></circle>
+            <path class="ai-mascot-core-bars" d="M55 80 L55 72 M60 80 L60 68 M65 80 L65 74"></path>
+            <g class="ai-mascot-face">
+                <g class="ai-mascot-eye ai-mascot-eye-left"><circle cx="45" cy="46" r="6"></circle></g>
+                <g class="ai-mascot-eye ai-mascot-eye-right"><circle cx="75" cy="46" r="6"></circle></g>
+                <path class="ai-mascot-mouth" d="M50 60 Q60 66 70 60"></path>
+            </g>
+        </g>
+    </svg>
+</button>
+
+<div class="ai-sidebar" id="ai-sidebar" aria-hidden="true">
+    <div class="ai-sidebar-header">
+        <div class="ai-sidebar-mascot-mini" aria-hidden="true"></div>
+        <div class="ai-sidebar-title">FORSA AI Assistant</div>
+        <div class="ai-sidebar-header-actions">
+            <button type="button" class="ai-sidebar-btn" id="btn-ai-new-chat">Baru</button>
+            <button type="button" class="ai-sidebar-btn" id="btn-ai-history" aria-label="Riwayat percakapan">Riwayat</button>
+            <button type="button" class="ai-sidebar-btn ai-sidebar-close" id="btn-ai-close" aria-label="Tutup FORSA AI Assistant">&times;</button>
+        </div>
+    </div>
+    <div class="ai-sidebar-body">
+        <div class="ai-history-list" id="ai-history-list" hidden></div>
+        <div class="ai-greeting-bubble" id="ai-sidebar-greeting">Halo, ada yang bisa saya bantu untuk membaca data FORSA?</div>
+        <div class="ai-chat-messages" id="ai-chat-messages"></div>
+        <div class="ai-suggested-questions" id="ai-suggested-questions"></div>
+    </div>
+    <div class="ai-sidebar-footer">
+        <form id="ai-chat-form" autocomplete="off">
+            <input type="text" id="ai-chat-input" name="message" placeholder="Tanyakan data FORSA…" aria-label="Tulis pertanyaan untuk FORSA AI Assistant">
+            <button type="submit" class="btn btn-primary btn-sm">Kirim</button>
+        </form>
+    </div>
+</div>
+
 <script>
     const CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;
 </script>
 <script src="<?= e(asset_url('assets/js/dashboard.js')) ?>"></script>
+<script src="<?= e(asset_url('assets/js/ai/mascot-animation.js')) ?>"></script>
+<script src="<?= e(asset_url('assets/js/ai/mascot-scroll.js')) ?>"></script>
+<script src="<?= e(asset_url('assets/js/ai/mascot-controller.js')) ?>"></script>
+<script src="<?= e(asset_url('assets/js/ai/ai-chat.js')) ?>"></script>
+<script src="<?= e(asset_url('assets/js/ai/ai-assistant.js')) ?>"></script>
 </body>
 </html>

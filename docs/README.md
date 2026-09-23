@@ -13,6 +13,7 @@ Dokumentasi ini mengikuti struktur yang disyaratkan PRD (`docs/product/PRD.md`).
 - [features/ftk-tree](features/ftk-tree) — drill-down tree.
 - [features/user-management](features/user-management) — manajemen user.
 - [deployment/installation.md](deployment/installation.md) — instalasi.
+- [ai-assistant/](ai-assistant/) — FORSA AI Assistant (fitur terpisah, PRD, status implementasi bertahap, analisis sumber data & proposal semantic layer).
 - [reports/](reports/) — laporan implementasi per tanggal.
 
 ## Menjalankan Aplikasi (Lokal)
