@@ -22,6 +22,7 @@ window.ForsaAi.AiChat = (function () {
         const form = root.querySelector('#ai-chat-form');
         const input = root.querySelector('#ai-chat-input');
         const historyList = root.querySelector('#ai-history-list');
+        let interactionReady = false;
         let historyPanelOpen = false;
         let currentConversationId = null;
         let state = 'closed'; // closed|opening|open|thinking|tool_running|responding|error|closing
@@ -112,6 +113,7 @@ window.ForsaAi.AiChat = (function () {
         }
 
         async function sendMessage(text) {
+            if (!interactionReady) return;
             text = (text || '').trim();
             if (!text) return;
             suggestedEl.innerHTML = '';
@@ -210,9 +212,8 @@ window.ForsaAi.AiChat = (function () {
         });
 
         // Expand/collapse (header icon): normal = existing sidebar width,
-        // expanded = ~50% of screen width (CSS .ai-sidebar.expanded). Fixed
-        // positioning means this only resizes the overlay itself — the
-        // dashboard behind it never reflows.
+        // expanded = ~50% of screen width (CSS .ai-sidebar.expanded).
+        // MascotController reserves matching dashboard space on the panel side.
         const EXPAND_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 2H2v4M10 14h4v-4M2 2l4.5 4.5M14 14L9.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
         const COLLAPSE_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 6h4V2M14 10h-4v4M6 6L1.5 1.5M10 10l4.5 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
         const expandBtn = root.querySelector('#btn-ai-expand');
@@ -231,23 +232,32 @@ window.ForsaAi.AiChat = (function () {
             if (e.key === 'Escape' && root.classList.contains('open')) onClose();
         });
 
-        function open() {
+        function prepareOpen() {
+            interactionReady = false;
+            root.inert = true;
             setState('opening');
             root.classList.add('open');
             root.setAttribute('aria-hidden', 'false');
             if (!messagesEl.children.length) renderSuggested();
+        }
+
+        function activate() {
+            interactionReady = true;
+            root.inert = false;
             setState('open');
-            setTimeout(() => input.focus(), 350);
+            input.focus();
         }
 
         function close() {
+            interactionReady = false;
+            root.inert = true;
             setState('closing');
             root.classList.remove('open');
             root.setAttribute('aria-hidden', 'true');
             setState('closed');
         }
 
-        return { open, close };
+        return { prepareOpen, activate, close };
     }
 
     return { create };

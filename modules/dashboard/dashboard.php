@@ -22,7 +22,7 @@ $aiConfig = require __DIR__ . '/../../config/ai.php';
 <link rel="stylesheet" href="<?= e(asset_url('assets/css/ai-assistant.css')) ?>">
 </head>
 <body>
-<div class="app-shell">
+<div class="app-shell ai-dashboard-content">
     <?php render_topbar($currentUser, 'dashboard'); ?>
 
     <div class="page-wrap">
@@ -143,31 +143,13 @@ $aiConfig = require __DIR__ . '/../../config/ai.php';
     </div>
 </div>
 
-<!-- FORSA AI Assistant (PRD_FORSA_AI_Assistant.md, Phase 1 — UI Foundation):
-     mascot placeholder + sidebar shell. No AI backend is wired yet — see
-     public/assets/js/ai/ai-chat.js. -->
-<button type="button" class="ai-mascot" id="ai-mascot" aria-label="Buka FORSA AI Assistant" data-state="idle" data-scroll="idle">
+<!-- FORSA Assistant Mascot — PRD 25–29. -->
+<button type="button" class="ai-mascot" id="ai-mascot" aria-label="Buka FORSA AI Assistant" data-state="hidden" data-scroll="hidden" tabindex="-1" aria-keyshortcuts="Control+Shift+K Meta+Shift+K">
     <div class="ai-mascot-greeting" id="ai-mascot-greeting" aria-live="polite"></div>
-    <svg class="ai-mascot-figure" viewBox="0 0 120 140" aria-hidden="true">
-        <ellipse class="ai-mascot-shadow" cx="60" cy="132" rx="30" ry="6"></ellipse>
-        <g class="ai-mascot-body">
-            <path class="ai-mascot-arm-left" d="M22 60 Q6 70 10 90"></path>
-            <path class="ai-mascot-arm-right" d="M98 60 Q114 70 110 90"></path>
-            <rect class="ai-mascot-torso" x="20" y="18" width="80" height="88" rx="30"></rect>
-            <path class="ai-mascot-antenna-stem" d="M60 18 L60 6"></path>
-            <circle class="ai-mascot-antenna-tip" cx="60" cy="5" r="4"></circle>
-            <circle class="ai-mascot-core" cx="60" cy="76" r="13"></circle>
-            <path class="ai-mascot-core-bars" d="M55 80 L55 72 M60 80 L60 68 M65 80 L65 74"></path>
-            <g class="ai-mascot-face">
-                <g class="ai-mascot-eye ai-mascot-eye-left"><circle cx="45" cy="46" r="6"></circle></g>
-                <g class="ai-mascot-eye ai-mascot-eye-right"><circle cx="75" cy="46" r="6"></circle></g>
-                <path class="ai-mascot-mouth" d="M50 60 Q60 66 70 60"></path>
-            </g>
-        </g>
-    </svg>
+    <canvas class="ai-mascot-figure" aria-hidden="true"></canvas>
 </button>
 
-<div class="ai-sidebar" id="ai-sidebar" aria-hidden="true">
+<div class="ai-sidebar" id="ai-sidebar" aria-hidden="true" inert>
     <div class="ai-sidebar-header">
         <div class="ai-sidebar-mascot-mini" aria-hidden="true"></div>
         <div class="ai-sidebar-title">FORSA AI Assistant</div>
@@ -196,11 +178,13 @@ $aiConfig = require __DIR__ . '/../../config/ai.php';
 
 <script>
     const CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;
-    // Config-driven (config/ai.php + .env MASCOT_GREETING_INTERVAL_MS),
-    // not hardcoded in mascot-animation.js.
-    window.ForsaAiConfig = { mascotGreetingIntervalMs: <?= (int) $aiConfig['mascot_greeting_interval_ms'] ?> };
+    window.ForsaAiConfig = {
+        mascotGreetingIntervalMs: <?= (int) $aiConfig['mascot_greeting_interval_ms'] ?>,
+        mascotWalkDurationMs: <?= (int) $aiConfig['mascot_walk_duration_ms'] ?>
+    };
 </script>
 <script src="<?= e(asset_url('assets/js/dashboard.js')) ?>"></script>
+<script src="<?= e(asset_url('assets/js/ai/mascot-renderer.js')) ?>"></script>
 <script src="<?= e(asset_url('assets/js/ai/mascot-animation.js')) ?>"></script>
 <script src="<?= e(asset_url('assets/js/ai/mascot-scroll.js')) ?>"></script>
 <script src="<?= e(asset_url('assets/js/ai/mascot-controller.js')) ?>"></script>

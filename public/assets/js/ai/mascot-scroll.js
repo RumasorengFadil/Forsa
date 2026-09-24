@@ -13,7 +13,7 @@ window.ForsaAi.MascotScroll = (function () {
         const SHOW_THRESHOLD = -40;
 
         function handleScroll() {
-            const y = window.scrollY;
+            const y = Math.max(0, window.scrollY);
             const delta = y - lastY;
             lastY = y;
 

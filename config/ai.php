@@ -26,5 +26,7 @@ return [
     // dashboard.php (window.ForsaAiConfig) rather than hardcoded in
     // mascot-animation.js, so it can be tuned per environment without a
     // code change/deploy.
+    // Full corner-to-corner walking duration; partial trips scale by distance.
+    'mascot_walk_duration_ms' => (int) env('MASCOT_WALK_DURATION_MS', 6000),
     'mascot_greeting_interval_ms' => (int) env('MASCOT_GREETING_INTERVAL_MS', 10000),
 ];

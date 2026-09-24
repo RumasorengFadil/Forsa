@@ -15,6 +15,10 @@
     const mascot = window.ForsaAi.MascotController.create({
         mascotEl,
         greetingEl,
-        onOpenSidebar: () => chat.open(),
+        sidebarEl,
+        appShellEl: document.querySelector('.ai-dashboard-content'),
+        onPrepareSidebar: () => chat.prepareOpen(),
+        onActivateSidebar: () => chat.activate(),
+        onCloseSidebar: () => chat.close(),
     });
 })();
